@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { pool } from '../../db';
-import { v4 as uuidv4 } from 'uuid';
+import prisma from '../../prisma/client';
 import { SUPPORTED_EXTENSIONS, EXCLUDED_DIRECTORIES } from './constants';
 
 export interface LocalRepo {
@@ -36,34 +35,63 @@ export class LocalRepoManager {
   }
 
   async createRepo(userId: string, name: string, description?: string): Promise<LocalRepo> {
-    const id = uuidv4();
-    const repoPath = path.join(this.repoBasePath, userId, id);
-    fs.mkdirSync(repoPath, { recursive: true });
+    // Create a placeholder directory; will be renamed after Prisma assigns the UUID
+    const tempId = `tmp-${Date.now()}`;
+    const tempPath = path.join(this.repoBasePath, userId, tempId);
+    fs.mkdirSync(tempPath, { recursive: true });
 
-    const result = await pool.query(
-      `INSERT INTO local_repositories (id, user_id, name, description, local_path, status, file_count)
-       VALUES ($1, $2, $3, $4, $5, 'active', 0) RETURNING *`,
-      [id, userId, name, description || null, repoPath]
-    );
+    let record;
+    try {
+      record = await prisma.localRepository.create({
+        data: {
+          userId,
+          name,
+          description: description || null,
+          localPath: tempPath,
+          status: 'active',
+          fileCount: 0,
+        },
+      });
+    } catch (err) {
+      // Clean up temp directory if DB insert failed
+      fs.rmSync(tempPath, { recursive: true, force: true });
+      throw err;
+    }
 
-    return this.mapRow(result.rows[0]);
+    // Rename the directory to use the real UUID
+    const repoPath = path.join(this.repoBasePath, userId, record.id);
+    try {
+      fs.renameSync(tempPath, repoPath);
+    } catch (err) {
+      // Clean up DB record and temp dir if rename failed
+      await prisma.localRepository.delete({ where: { id: record.id } }).catch(() => undefined);
+      fs.rmSync(tempPath, { recursive: true, force: true });
+      throw err;
+    }
+
+    // Update the stored path to the final directory
+    const updated = await prisma.localRepository.update({
+      where: { id: record.id },
+      data: { localPath: repoPath },
+    });
+
+    return this.mapRecord(updated);
   }
 
   async getRepo(id: string, userId: string): Promise<LocalRepo | null> {
-    const result = await pool.query(
-      'SELECT * FROM local_repositories WHERE id = $1 AND user_id = $2',
-      [id, userId]
-    );
-    if (result.rows.length === 0) return null;
-    return this.mapRow(result.rows[0]);
+    const record = await prisma.localRepository.findFirst({
+      where: { id, userId },
+    });
+    if (!record) return null;
+    return this.mapRecord(record);
   }
 
   async listRepos(userId: string): Promise<LocalRepo[]> {
-    const result = await pool.query(
-      'SELECT * FROM local_repositories WHERE user_id = $1 ORDER BY created_at DESC',
-      [userId]
-    );
-    return result.rows.map(this.mapRow);
+    const records = await prisma.localRepository.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return records.map((r) => this.mapRecord(r));
   }
 
   async deleteRepo(id: string, userId: string): Promise<boolean> {
@@ -74,7 +102,7 @@ export class LocalRepoManager {
       fs.rmSync(repo.localPath, { recursive: true, force: true });
     }
 
-    await pool.query('DELETE FROM local_repositories WHERE id = $1', [id]);
+    await prisma.localRepository.delete({ where: { id } });
     return true;
   }
 
@@ -157,23 +185,33 @@ export class LocalRepoManager {
   }
 
   async updateSyncStatus(id: string): Promise<void> {
-    await pool.query(
-      'UPDATE local_repositories SET status = $1, last_synced = NOW() WHERE id = $2',
-      ['active', id]
-    );
+    await prisma.localRepository.update({
+      where: { id },
+      data: { status: 'active', lastSynced: new Date() },
+    });
   }
 
-  private mapRow(row: Record<string, unknown>): LocalRepo {
+  private mapRecord(record: {
+    id: string;
+    userId: string;
+    name: string;
+    description: string | null;
+    localPath: string;
+    status: string;
+    lastSynced: Date | null;
+    fileCount: number;
+    createdAt: Date;
+  }): LocalRepo {
     return {
-      id: row['id'] as string,
-      userId: row['user_id'] as string,
-      name: row['name'] as string,
-      description: row['description'] as string | undefined,
-      localPath: row['local_path'] as string,
-      status: row['status'] as 'active' | 'syncing' | 'error',
-      lastSynced: row['last_synced'] ? new Date(row['last_synced'] as string) : undefined,
-      fileCount: row['file_count'] as number,
-      createdAt: new Date(row['created_at'] as string),
+      id: record.id,
+      userId: record.userId,
+      name: record.name,
+      description: record.description ?? undefined,
+      localPath: record.localPath,
+      status: record.status as 'active' | 'syncing' | 'error',
+      lastSynced: record.lastSynced ?? undefined,
+      fileCount: record.fileCount,
+      createdAt: record.createdAt,
     };
   }
 }

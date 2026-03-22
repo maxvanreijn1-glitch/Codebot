@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { pool } from '../db';
+import prisma from '../prisma/client';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 
 const router = Router();
@@ -17,17 +17,20 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
     return;
   }
   try {
-    const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
-    if (existing.rows.length > 0) {
+    const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
+    if (existing) {
       res.status(409).json({ error: 'Email already registered' });
       return;
     }
     const passwordHash = await bcrypt.hash(password, 12);
-    const result = await pool.query(
-      'INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3) RETURNING id, email, name, tier, usage_count, usage_limit',
-      [email.toLowerCase().trim(), passwordHash, name.trim()]
-    );
-    const user = result.rows[0];
+    const user = await prisma.user.create({
+      data: {
+        email: email.toLowerCase().trim(),
+        passwordHash,
+        name: name.trim(),
+      },
+      select: { id: true, email: true, name: true, tier: true, usageCount: true, usageLimit: true },
+    });
     const token = jwt.sign(
       { id: user.id, email: user.email, tier: user.tier },
       process.env.JWT_SECRET || 'fallback-secret',
@@ -47,16 +50,12 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     return;
   }
   try {
-    const result = await pool.query(
-      'SELECT id, email, name, tier, usage_count, usage_limit, password_hash FROM users WHERE email = $1',
-      [email.toLowerCase().trim()]
-    );
-    if (result.rows.length === 0) {
+    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
+    if (!user) {
       res.status(401).json({ error: 'Invalid credentials' });
       return;
     }
-    const user = result.rows[0];
-    const valid = await bcrypt.compare(password, user.password_hash);
+    const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) {
       res.status(401).json({ error: 'Invalid credentials' });
       return;
@@ -66,7 +65,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       process.env.JWT_SECRET || 'fallback-secret',
       { expiresIn: '7d' }
     );
-    const { password_hash: _password_hash, ...userWithoutPassword } = user;
+    const { passwordHash: _ph, ...userWithoutPassword } = user;
     res.json({ token, user: userWithoutPassword });
   } catch (error) {
     console.error('Login error:', error);
@@ -76,15 +75,15 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
 
 router.get('/me', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const result = await pool.query(
-      'SELECT id, email, name, tier, usage_count, usage_limit, stripe_customer_id, created_at FROM users WHERE id = $1',
-      [req.user!.id]
-    );
-    if (result.rows.length === 0) {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: { id: true, email: true, name: true, tier: true, usageCount: true, usageLimit: true, stripeCustomerId: true, createdAt: true },
+    });
+    if (!user) {
       res.status(404).json({ error: 'User not found' });
       return;
     }
-    res.json(result.rows[0]);
+    res.json(user);
   } catch (error) {
     console.error('Get me error:', error);
     res.status(500).json({ error: 'Failed to get user' });

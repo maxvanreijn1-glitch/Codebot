@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { commandExecutor, CommandType } from '../services/local-repo/commands';
-import { pool } from '../db';
+import prisma from '../prisma/client';
 
 const router = Router();
 router.use(authenticateToken);
@@ -59,22 +59,21 @@ router.get('/history', async (req: AuthRequest, res: Response): Promise<void> =>
     const limitRaw = Number(req.query.limit);
     const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(Math.floor(limitRaw), 100) : 50;
 
-    let query = `SELECT cl.*, lr.name as repository_name
-                 FROM command_logs cl
-                 LEFT JOIN local_repositories lr ON cl.repository_id = lr.id
-                 WHERE cl.user_id = $1`;
-    const params: unknown[] = [req.user!.id];
+    const logs = await prisma.commandLog.findMany({
+      where: {
+        userId: req.user!.id,
+        ...(repositoryId ? { repositoryId: String(repositoryId) } : {}),
+      },
+      include: { repository: { select: { name: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
 
-    if (repositoryId) {
-      query += ' AND cl.repository_id = $2';
-      params.push(repositoryId);
-    }
-
-    query += ` ORDER BY cl.created_at DESC LIMIT $${params.length + 1}`;
-    params.push(limit);
-
-    const result = await pool.query(query, params);
-    res.json(result.rows);
+    const mapped = logs.map(({ repository, ...l }) => ({
+      ...l,
+      repository_name: repository?.name ?? null,
+    }));
+    res.json(mapped);
   } catch (error) {
     console.error('Command history error:', error);
     res.status(500).json({ error: 'Failed to get command history' });

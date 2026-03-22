@@ -4,7 +4,8 @@ import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
 import fs from 'fs';
-import { pool, initializeDatabase } from './db';
+import { execSync } from 'child_process';
+import prisma from './prisma/client';
 import authRoutes from './routes/auth';
 import repositoryRoutes from './routes/repositories';
 import analysisRoutes from './routes/analysis';
@@ -21,7 +22,7 @@ dotenv.config();
 // ---------------------------------------------------------------------------
 // Environment variable validation – fail fast so the cause is obvious.
 // ---------------------------------------------------------------------------
-const REQUIRED_ENV_VARS = ['DATABASE_URL', 'JWT_SECRET', 'ANTHROPIC_API_KEY'];
+const REQUIRED_ENV_VARS = ['DATABASE_URL', 'JWT_SECRET'];
 
 function validateEnv(): void {
   const missing = REQUIRED_ENV_VARS.filter((key) => !process.env[key]);
@@ -116,13 +117,30 @@ if (isProduction) {
 }
 
 // ---------------------------------------------------------------------------
-// Database initialisation + server start
+// Database migrations + server start
 // ---------------------------------------------------------------------------
 async function start(): Promise<void> {
+  // Run Prisma migrations on startup.
+  // After `tsc`, __dirname is `server/dist/`; going up one level reaches `server/`
+  // where `prisma/schema.prisma` lives.
   try {
-    await initializeDatabase();
+    execSync('npx prisma migrate deploy', {
+      stdio: 'inherit',
+      cwd: path.join(__dirname, '..'), // server/dist/ -> server/
+    });
+    console.log('Prisma migrations applied');
   } catch (err) {
-    console.error('Failed to initialize database:', err);
+    console.warn(
+      'Prisma migrate deploy skipped or failed:',
+      err instanceof Error ? err.message : String(err)
+    );
+  }
+
+  try {
+    await prisma.$connect();
+    console.log('Database connected successfully');
+  } catch (err) {
+    console.error('Failed to connect to database:', err);
     process.exit(1);
   }
 
@@ -137,10 +155,10 @@ async function start(): Promise<void> {
     console.log(`Received ${signal}. Shutting down gracefully…`);
     server.close(async () => {
       try {
-        await pool.end();
-        console.log('Database pool closed. Goodbye.');
+        await prisma.$disconnect();
+        console.log('Database disconnected. Goodbye.');
       } catch (err) {
-        console.error('Error closing database pool:', err);
+        console.error('Error disconnecting database:', err);
       }
       process.exit(0);
     });

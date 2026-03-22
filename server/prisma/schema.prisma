@@ -1,0 +1,202 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Tier {
+  free
+  pro
+  premium
+}
+
+enum RepoStatus {
+  active
+  syncing
+  error
+}
+
+enum PRStatus {
+  open
+  approved
+  merged
+  closed
+}
+
+enum AnalysisStatus {
+  pending
+  processing
+  completed
+  failed
+}
+
+enum PaymentStatus {
+  pending
+  succeeded
+  failed
+}
+
+enum SuggestionType {
+  improvement
+  bug
+  performance
+  security
+  style
+}
+
+enum SuggestionStatus {
+  open
+  accepted
+  dismissed
+}
+
+enum CommandStatus {
+  running
+  success
+  failed
+}
+
+model User {
+  id               String    @id @default(uuid())
+  email            String    @unique
+  passwordHash     String    @map("password_hash")
+  name             String
+  tier             Tier      @default(free)
+  usageCount       Int       @default(0) @map("usage_count")
+  usageLimit       Int       @default(5) @map("usage_limit")
+  stripeCustomerId String?   @map("stripe_customer_id")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  repositories     Repository[]
+  analyses         Analysis[]
+  payments         Payment[]
+  localRepos       LocalRepository[]
+  pullRequests     PullRequest[]
+  suggestions      Suggestion[]
+  commandLogs      CommandLog[]
+
+  @@map("users")
+}
+
+model Repository {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  name        String
+  description String?
+  filePath    String?  @map("file_path")
+  fileCount   Int      @default(0) @map("file_count")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  analyses  Analysis[]
+
+  @@map("repositories")
+}
+
+model LocalRepository {
+  id          String     @id @default(uuid())
+  userId      String     @map("user_id")
+  name        String
+  description String?
+  localPath   String     @map("local_path")
+  status      RepoStatus @default(active)
+  fileCount   Int        @default(0) @map("file_count")
+  lastSynced  DateTime?  @map("last_synced")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @default(now()) @updatedAt @map("updated_at")
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pullRequests PullRequest[]
+  suggestions  Suggestion[]
+  commandLogs  CommandLog[]
+
+  @@map("local_repositories")
+}
+
+model Analysis {
+  id           String         @id @default(uuid())
+  userId       String         @map("user_id")
+  repositoryId String?        @map("repository_id")
+  prompt       String
+  result       Json?
+  status       AnalysisStatus @default(pending)
+  createdAt    DateTime       @default(now()) @map("created_at")
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  repository Repository? @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
+
+  @@map("analyses")
+}
+
+model Payment {
+  id                    String        @id @default(uuid())
+  userId                String        @map("user_id")
+  stripePaymentIntentId String?       @unique @map("stripe_payment_intent_id")
+  amount                Int
+  currency              String        @default("gbp")
+  tier                  String
+  status                PaymentStatus @default(pending)
+  createdAt             DateTime      @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+model PullRequest {
+  id           String    @id @default(uuid())
+  userId       String    @map("user_id")
+  repositoryId String?   @map("repository_id")
+  title        String
+  description  String?
+  status       PRStatus  @default(open)
+  fileChanges  Json      @default("[]") @map("file_changes")
+  mergedAt     DateTime? @map("merged_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  repository LocalRepository? @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
+
+  @@map("pull_requests")
+}
+
+model Suggestion {
+  id           String           @id @default(uuid())
+  userId       String           @map("user_id")
+  repositoryId String?          @map("repository_id")
+  filePath     String?          @map("file_path")
+  type         SuggestionType   @map("suggestion_type")
+  message      String
+  codeSnippet  String?          @map("code_snippet")
+  lineNumber   Int?             @map("line_number")
+  status       SuggestionStatus @default(open)
+  createdAt    DateTime         @default(now()) @map("created_at")
+
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  repository LocalRepository? @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
+
+  @@map("suggestions")
+}
+
+model CommandLog {
+  id           String        @id @default(uuid())
+  userId       String        @map("user_id")
+  repositoryId String?       @map("repository_id")
+  commandType  String        @map("command_type")
+  params       Json          @default("{}")
+  status       CommandStatus @default(running)
+  result       Json?
+  durationMs   Int?          @map("duration_ms")
+  errorMessage String?       @map("error_message")
+  completedAt  DateTime?     @map("completed_at")
+  createdAt    DateTime      @default(now()) @map("created_at")
+
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  repository LocalRepository? @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
+
+  @@map("command_logs")
+}

@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { pool } from '../db';
+import prisma from '../prisma/client';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 
 const uploadDir = path.join(process.cwd(), 'uploads');
@@ -12,7 +12,7 @@ if (!fs.existsSync(uploadDir)) {
 
 const storage = multer.diskStorage({
   destination: (req, _file, cb) => {
-    const userDir = path.join(uploadDir, (req as AuthRequest).user!.id);
+    const userDir = path.join(uploadDir, (req as unknown as AuthRequest).user!.id);
     if (!fs.existsSync(userDir)) {
       fs.mkdirSync(userDir, { recursive: true });
     }
@@ -41,7 +41,8 @@ const upload = multer({
 const router = Router();
 router.use(authenticateToken);
 
-router.post('/', upload.array('files', 50), async (req: AuthRequest, res: Response): Promise<void> => {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+router.post('/', upload.array('files', 50) as any, async (req: AuthRequest, res: Response): Promise<void> => {
   const { name, description } = req.body;
   const files = req.files as Express.Multer.File[];
 
@@ -64,12 +65,17 @@ router.post('/', upload.array('files', 50), async (req: AuthRequest, res: Respon
       fs.renameSync(file.path, dest);
     }
 
-    const result = await pool.query(
-      'INSERT INTO repositories (user_id, name, description, file_path, file_count) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [req.user!.id, name, description || null, repoDir, files.length]
-    );
+    const repo = await prisma.repository.create({
+      data: {
+        userId: req.user!.id,
+        name,
+        description: description || null,
+        filePath: repoDir,
+        fileCount: files.length,
+      },
+    });
 
-    res.status(201).json(result.rows[0]);
+    res.status(201).json(repo);
   } catch (error) {
     console.error('Upload error:', error);
     res.status(500).json({ error: 'Failed to upload repository' });
@@ -78,11 +84,11 @@ router.post('/', upload.array('files', 50), async (req: AuthRequest, res: Respon
 
 router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const result = await pool.query(
-      'SELECT * FROM repositories WHERE user_id = $1 ORDER BY created_at DESC',
-      [req.user!.id]
-    );
-    res.json(result.rows);
+    const repos = await prisma.repository.findMany({
+      where: { userId: req.user!.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(repos);
   } catch (error) {
     console.error('List repos error:', error);
     res.status(500).json({ error: 'Failed to list repositories' });
@@ -91,18 +97,16 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
 
 router.get('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const result = await pool.query(
-      'SELECT * FROM repositories WHERE id = $1 AND user_id = $2',
-      [req.params.id, req.user!.id]
-    );
-    if (result.rows.length === 0) {
+    const repo = await prisma.repository.findFirst({
+      where: { id: req.params.id, userId: req.user!.id },
+    });
+    if (!repo) {
       res.status(404).json({ error: 'Repository not found' });
       return;
     }
-    const repo = result.rows[0];
     let files: string[] = [];
-    if (repo.file_path && fs.existsSync(repo.file_path)) {
-      files = fs.readdirSync(repo.file_path);
+    if (repo.filePath && fs.existsSync(repo.filePath)) {
+      files = fs.readdirSync(repo.filePath);
     }
     res.json({ ...repo, files });
   } catch (error) {
@@ -113,19 +117,17 @@ router.get('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
 
 router.delete('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const result = await pool.query(
-      'SELECT * FROM repositories WHERE id = $1 AND user_id = $2',
-      [req.params.id, req.user!.id]
-    );
-    if (result.rows.length === 0) {
+    const repo = await prisma.repository.findFirst({
+      where: { id: req.params.id, userId: req.user!.id },
+    });
+    if (!repo) {
       res.status(404).json({ error: 'Repository not found' });
       return;
     }
-    const repo = result.rows[0];
-    if (repo.file_path && fs.existsSync(repo.file_path)) {
-      fs.rmSync(repo.file_path, { recursive: true, force: true });
+    if (repo.filePath && fs.existsSync(repo.filePath)) {
+      fs.rmSync(repo.filePath, { recursive: true, force: true });
     }
-    await pool.query('DELETE FROM repositories WHERE id = $1', [repo.id]);
+    await prisma.repository.delete({ where: { id: repo.id } });
     res.json({ message: 'Repository deleted' });
   } catch (error) {
     console.error('Delete repo error:', error);

@@ -7,3 +7,4 @@ local-repos/
 .DS_Store
 client/dist/
 server/dist/
+package-lock.json
