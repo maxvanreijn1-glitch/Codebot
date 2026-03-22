@@ -6,7 +6,7 @@ services:
     plan: starter
     # Build client then compile server TypeScript.
     # The server's index.ts serves the client's dist/ at runtime (production mode).
-    buildCommand: yarn build
+    buildCommand: yarn install && yarn build
     startCommand: node server/dist/index.js
     healthCheckPath: /api/health
     envVars:
