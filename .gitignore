@@ -5,3 +5,5 @@ uploads/
 local-repos/
 *.log
 .DS_Store
+client/dist/
+server/dist/

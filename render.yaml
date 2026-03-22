@@ -4,7 +4,7 @@ services:
     runtime: node
     region: oregon
     plan: starter
-    # Install root deps (none), build client then compile server TypeScript.
+    # Build client then compile server TypeScript.
     # The server's index.ts serves the client's dist/ at runtime (production mode).
     buildCommand: npm run build
     startCommand: npm start
