@@ -4,12 +4,10 @@ services:
     runtime: node
     region: oregon
     plan: starter
-    # Build the React client first, then compile the Express server.
+    # Install root deps (none), build client then compile server TypeScript.
     # The server's index.ts serves the client's dist/ at runtime (production mode).
-    buildCommand: >
-      cd client && npm install && npm run build &&
-      cd ../server && npm install && npm run build
-    startCommand: cd server && npm start
+    buildCommand: npm run build
+    startCommand: npm start
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
