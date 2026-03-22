@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../api/client';
 import { Upload, X, FolderOpen, CheckCircle, AlertCircle } from 'lucide-react';
+import React from 'react';
 
 export default function Repository() {
   const [name, setName] = useState('');
