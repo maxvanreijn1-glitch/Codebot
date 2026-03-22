@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
 import fs from 'fs';
+import { pool, initializeDatabase } from './db';
 import authRoutes from './routes/auth';
 import repositoryRoutes from './routes/repositories';
 import analysisRoutes from './routes/analysis';
@@ -17,6 +18,25 @@ import copilotRoutes from './routes/copilot';
 
 dotenv.config();
 
+// ---------------------------------------------------------------------------
+// Environment variable validation – fail fast so the cause is obvious.
+// ---------------------------------------------------------------------------
+const REQUIRED_ENV_VARS = ['DATABASE_URL', 'JWT_SECRET', 'ANTHROPIC_API_KEY'];
+
+function validateEnv(): void {
+  const missing = REQUIRED_ENV_VARS.filter((key) => !process.env[key]);
+  if (missing.length > 0) {
+    console.error(`Missing required environment variables: ${missing.join(', ')}`);
+    console.error('Please set these variables and restart the server.');
+    process.exit(1);
+  }
+}
+
+validateEnv();
+
+// ---------------------------------------------------------------------------
+// App setup
+// ---------------------------------------------------------------------------
 const app = express();
 const PORT = process.env.PORT || 5000;
 const isProduction = process.env.NODE_ENV === 'production';
@@ -49,6 +69,9 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
+// ---------------------------------------------------------------------------
+// Routes
+// ---------------------------------------------------------------------------
 app.use('/api/auth', authRoutes);
 app.use('/api/repositories', repositoryRoutes);
 app.use('/api/analysis', analysisRoutes);
@@ -73,6 +96,9 @@ if (isProduction) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Error handler (must be after all routes)
+// ---------------------------------------------------------------------------
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err.stack);
   res.status(500).json({ error: 'Internal server error' });
@@ -89,8 +115,47 @@ if (isProduction) {
   }
 }
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+// ---------------------------------------------------------------------------
+// Database initialisation + server start
+// ---------------------------------------------------------------------------
+async function start(): Promise<void> {
+  try {
+    await initializeDatabase();
+  } catch (err) {
+    console.error('Failed to initialize database:', err);
+    process.exit(1);
+  }
+
+  const server = app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Graceful shutdown – Render sends SIGTERM before stopping a service.
+  // ---------------------------------------------------------------------------
+  const shutdown = (signal: string) => {
+    console.log(`Received ${signal}. Shutting down gracefully…`);
+    server.close(async () => {
+      try {
+        await pool.end();
+        console.log('Database pool closed. Goodbye.');
+      } catch (err) {
+        console.error('Error closing database pool:', err);
+      }
+      process.exit(0);
+    });
+
+    // Force shutdown after 10 seconds if connections don't close in time
+    setTimeout(() => {
+      console.error('Forcing shutdown after timeout.');
+      process.exit(1);
+    }, 10000).unref();
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+}
+
+start();
 
 export default app;
