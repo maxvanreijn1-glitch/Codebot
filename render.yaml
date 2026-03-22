@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: codebot-server
+    runtime: node
+    region: oregon
+    plan: starter
+    rootDir: server
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
