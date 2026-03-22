@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Code2, AlertCircle } from 'lucide-react';
+import React from 'react';
 
 export default function Register() {
   const [name, setName] = useState('');
