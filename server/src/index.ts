@@ -41,8 +41,16 @@ const allowedOrigins = process.env.CORS_ORIGIN
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || !isProduction) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
+    // Always allow same-origin requests (no origin header)
+    if (!origin) return callback(null, true);
+    // In development, allow all
+    if (!isProduction) return callback(null, true);
+    // In production, allow the Render domain + any configured origins
+    const productionOrigins = [
+      'https://codebot-ktjb.onrender.com',
+      ...allowedOrigins,
+    ];
+    if (productionOrigins.includes(origin)) return callback(null, true);
     callback(new Error('Origin not allowed'));
   },
   credentials: true,
