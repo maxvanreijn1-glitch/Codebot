@@ -90,10 +90,23 @@ app.get('/api/health', (_req, res) => {
 
 // Serve React client in production
 // __dirname is server/dist/ after tsc; client build is at ../../client/dist
+const clientDistPath = path.join(__dirname, '..', '..', 'client', 'dist');
+const clientIndexPath = path.join(clientDistPath, 'index.html');
+
 if (isProduction) {
-  const clientDistPath = path.join(__dirname, '..', '..', 'client', 'dist');
+  console.log('Production mode: serving static client from', clientDistPath);
   if (fs.existsSync(clientDistPath)) {
+    console.log('Client dist found. Files:', fs.readdirSync(clientDistPath));
     app.use(express.static(clientDistPath));
+  } else {
+    console.error('Client dist NOT found at:', clientDistPath);
+    console.error('Server __dirname:', __dirname);
+    try {
+      const parentDir = path.join(__dirname, '..', '..');
+      console.error('Parent directory contents:', fs.readdirSync(parentDir));
+    } catch {
+      console.error('Could not read parent directory');
+    }
   }
 }
 
@@ -108,10 +121,17 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 // SPA fallback: must be after API routes and error handler so 404s for
 // unknown API paths are handled correctly; serve index.html for all other paths.
 if (isProduction) {
-  const clientDistPath = path.join(__dirname, '..', '..', 'client', 'dist');
-  if (fs.existsSync(clientDistPath)) {
+  if (fs.existsSync(clientIndexPath)) {
+    console.log('SPA fallback enabled: serving', clientIndexPath);
     app.get('*', (_req, res) => {
-      res.sendFile(path.join(clientDistPath, 'index.html'));
+      res.sendFile(clientIndexPath);
+    });
+  } else {
+    console.error('index.html not found at:', clientIndexPath);
+    app.get('*', (_req, res) => {
+      res.status(503).send(
+        'Client build not found. Please ensure the build completed successfully.'
+      );
     });
   }
 }
