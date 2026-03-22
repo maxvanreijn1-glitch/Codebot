@@ -6,7 +6,7 @@
     "npm": ">=8.0.0"
   },
   "scripts": {
-    "build": "cd client && npm install && npm run build && cd ../server && npm install && npm run build",
+    "build": "cd client && yarn && yarn build && cd ../server && yarn && yarn build",
     "start": "node server/dist/index.js"
   }
 }
