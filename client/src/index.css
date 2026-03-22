@@ -3,7 +3,51 @@
 @tailwind utilities;
 
 @layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
   body {
     @apply bg-gray-950 text-gray-100 font-sans;
+    /* Explicit fallbacks in case @apply is not yet resolved */
+    background-color: #030712;
+    color: #f3f4f6;
+    margin: 0;
+    min-height: 100vh;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  #root {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  a {
+    @apply text-sky-400;
+    color: #38bdf8; /* fallback for sky-400 */
+    text-decoration: none;
+  }
+
+  a:hover {
+    @apply text-sky-300;
+    color: #7dd3fc; /* fallback for sky-300 */
+  }
+
+  img,
+  svg {
+    display: block;
+    max-width: 100%;
+  }
+
+  button {
+    cursor: pointer;
   }
 }
