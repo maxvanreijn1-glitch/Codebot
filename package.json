@@ -1,0 +1,8 @@
+{
+  "name": "codebot",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "cd client && yarn install && yarn build && cd ../server && yarn install && yarn build",
+    "start": "node server/dist/index.js"
+  }
+}
