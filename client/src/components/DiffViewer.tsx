@@ -5,9 +5,12 @@ interface DiffViewerProps {
   fileChanges: FileChange[];
 }
 
+// Maximum lines to include in LCS computation to bound O(m*n) time/memory complexity
+const MAX_DIFF_LINES = 200;
+
 function computeLCS(a: string[], b: string[]): string[] {
-  const m = Math.min(a.length, 200);
-  const n = Math.min(b.length, 200);
+  const m = Math.min(a.length, MAX_DIFF_LINES);
+  const n = Math.min(b.length, MAX_DIFF_LINES);
   const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {

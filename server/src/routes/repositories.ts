@@ -33,7 +33,7 @@ const upload = multer({
     if (allowed.includes(ext) || file.originalname.endsWith('.example')) {
       cb(null, true);
     } else {
-      cb(null, true);
+      cb(new Error('File type not allowed'));
     }
   },
 });
