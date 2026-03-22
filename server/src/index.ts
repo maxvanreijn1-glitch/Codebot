@@ -7,6 +7,11 @@ import repositoryRoutes from './routes/repositories';
 import analysisRoutes from './routes/analysis';
 import paymentRoutes from './routes/payments';
 import userRoutes from './routes/user';
+import claudeAnalysisRoutes from './routes/claude-analysis';
+import localReposRoutes from './routes/local-repos';
+import pullRequestsRoutes from './routes/pull-requests';
+import commandsRoutes from './routes/commands';
+import copilotRoutes from './routes/copilot';
 
 dotenv.config();
 
@@ -36,6 +41,11 @@ app.use('/api/repositories', repositoryRoutes);
 app.use('/api/analysis', analysisRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/user', userRoutes);
+app.use('/api/claude', claudeAnalysisRoutes);
+app.use('/api/repos', localReposRoutes);
+app.use('/api/pull-requests', pullRequestsRoutes);
+app.use('/api/commands', commandsRoutes);
+app.use('/api/copilot', copilotRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

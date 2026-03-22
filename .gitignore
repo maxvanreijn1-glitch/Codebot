@@ -2,5 +2,6 @@ node_modules/
 dist/
 .env
 uploads/
+local-repos/
 *.log
 .DS_Store
