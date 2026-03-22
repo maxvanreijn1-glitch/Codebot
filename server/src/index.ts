@@ -81,23 +81,27 @@ const clientIndexPath = path.join(clientDistPath, 'index.html');
 if (isProduction) {
   if (fs.existsSync(clientDistPath)) {
     app.use(express.static(clientDistPath));
+  } else {
+    console.warn('Client dist folder not found at:', clientDistPath);
   }
 }
 
-// Error handler
-app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error(err.stack);
-  res.status(500).json({ error: 'Internal server error' });
-});
-
-// SPA fallback - must be after error handler and static file serving
+// SPA fallback - MUST be before error handler, AFTER API routes and static files
 if (isProduction) {
   if (fs.existsSync(clientIndexPath)) {
     app.get('*', (_req, res) => {
       res.sendFile(clientIndexPath);
     });
+  } else {
+    console.warn('Client index.html not found at:', clientIndexPath);
   }
 }
+
+// Error handler - MUST be last
+app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error(err.stack);
+  res.status(500).json({ error: 'Internal server error' });
+});
 
 async function start(): Promise<void> {
   try {
@@ -132,7 +136,6 @@ async function start(): Promise<void> {
       process.exit(0);
     });
 
-    // Force exit after 10 seconds if graceful shutdown stalls
     setTimeout(() => {
       process.exit(1);
     }, 10000).unref();
