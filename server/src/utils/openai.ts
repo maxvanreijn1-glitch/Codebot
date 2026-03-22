@@ -1,16 +1,8 @@
-import OpenAI from 'openai';
+import { parseJsonResponse } from './json';
+import { getClaudeClient, DEFAULT_MODEL, MAX_TOKENS } from '../services/claude/client';
+import { CODE_ANALYSIS_SYSTEM_PROMPT } from '../services/claude/prompts';
 
-let openaiClient: OpenAI | null = null;
-
-function getOpenAIClient(): OpenAI {
-  if (!openaiClient) {
-    openaiClient = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
-  }
-  return openaiClient;
-}
-
+// Re-exported types for backwards compatibility with existing routes
 export interface FileChange {
   filename: string;
   original: string;
@@ -26,48 +18,41 @@ export interface AnalysisResult {
 }
 
 export async function analyzeCode(codeContent: string, prompt: string): Promise<AnalysisResult> {
-  const client = getOpenAIClient();
-
-  const systemPrompt = `You are an expert code analysis assistant. When given code and a prompt, analyze the code and provide structured feedback. 
-Always respond with valid JSON in exactly this format:
-{
-  "summary": "Brief one-line summary of what was analyzed",
-  "fileChanges": [
-    {
-      "filename": "example.ts",
-      "original": "original code here",
-      "modified": "modified/suggested code here",
-      "explanation": "Why this change was made"
-    }
-  ],
-  "overallExplanation": "Detailed explanation of the analysis and all recommendations",
-  "suggestions": ["suggestion 1", "suggestion 2", "suggestion 3"]
-}
-
-If no code changes are needed for a specific file, you can still include it in fileChanges with original == modified.
-If no code was provided, analyze based on the prompt alone and provide general suggestions with empty fileChanges array.`;
+  const client = getClaudeClient();
 
   const userMessage = codeContent
     ? `Here is the code to analyze:\n\n${codeContent}\n\nUser request: ${prompt}`
     : `User request: ${prompt}`;
 
-  const response = await client.chat.completions.create({
-    model: 'gpt-4o',
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userMessage },
-    ],
-    max_tokens: 4096,
-    temperature: 0.3,
-    response_format: { type: 'json_object' },
+  const response = await client.messages.create({
+    model: DEFAULT_MODEL,
+    max_tokens: MAX_TOKENS,
+    system: CODE_ANALYSIS_SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: userMessage }],
   });
 
-  const content = response.choices[0]?.message?.content;
+  const content = response.content[0].type === 'text' ? response.content[0].text : null;
   if (!content) {
-    throw new Error('No response from OpenAI');
+    throw new Error('No response from Claude');
   }
 
-  const parsed = JSON.parse(content) as AnalysisResult;
+  let parsed: Partial<AnalysisResult>;
+  try {
+    parsed = parseJsonResponse<Partial<AnalysisResult>>(content) ?? {
+      summary: 'Analysis complete',
+      overallExplanation: content,
+      fileChanges: [],
+      suggestions: [],
+    };
+  } catch {
+    parsed = {
+      summary: 'Analysis complete',
+      overallExplanation: content,
+      fileChanges: [],
+      suggestions: [],
+    };
+  }
+
   return {
     summary: parsed.summary || 'Analysis complete',
     fileChanges: parsed.fileChanges || [],
