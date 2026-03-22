@@ -1,7 +1,6 @@
-import { pool } from '../../db';
+import prisma from '../../prisma/client';
 import { localRepoManager } from './manager';
 import { repoScanner } from './scanner';
-import { v4 as uuidv4 } from 'uuid';
 
 export interface CommandResult {
   success: boolean;
@@ -43,16 +42,18 @@ interface PrMergeParams {
 export class CommandExecutor {
   async execute(command: Command): Promise<CommandResult> {
     const startTime = Date.now();
-    const logId = uuidv4();
+    let logId: string | undefined;
 
     try {
-      await this.logCommandStart(logId, command);
+      logId = await this.logCommandStart(command);
       const result = await this.dispatch(command);
       await this.logCommandEnd(logId, 'success', result, Date.now() - startTime);
       return result;
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : 'Unknown error';
-      await this.logCommandEnd(logId, 'failed', null, Date.now() - startTime, errMsg);
+      if (logId) {
+        await this.logCommandEnd(logId, 'failed', null, Date.now() - startTime, errMsg);
+      }
       return { success: false, message: 'Command failed', error: errMsg };
     }
   }
@@ -82,17 +83,16 @@ export class CommandExecutor {
     const repo = await localRepoManager.getRepo(command.repoId, command.userId);
     if (!repo) return { success: false, message: 'Repository not found' };
 
-    // Pull latest state: re-scan files to update index
     const files = localRepoManager.scanFiles(repo.localPath);
-    await pool.query(
-      'UPDATE local_repositories SET file_count = $1, last_synced = NOW() WHERE id = $2',
-      [files.length, command.repoId]
-    );
+    await prisma.localRepository.update({
+      where: { id: command.repoId },
+      data: { fileCount: files.length, lastSynced: new Date() },
+    });
 
     return {
       success: true,
       message: `Pulled ${files.length} files from repository`,
-      data: { fileCount: files.length, files: files.map(f => f.path) },
+      data: { fileCount: files.length, files: files.map((f) => f.path) },
     };
   }
 
@@ -123,10 +123,10 @@ export class CommandExecutor {
     if (!repo) return { success: false, message: 'Repository not found' };
 
     const index = repoScanner.scanAndIndex(repo.localPath);
-    await pool.query(
-      'UPDATE local_repositories SET file_count = $1, status = $2, last_synced = NOW() WHERE id = $3',
-      [index.totalFiles, 'active', command.repoId]
-    );
+    await prisma.localRepository.update({
+      where: { id: command.repoId },
+      data: { fileCount: index.totalFiles, status: 'active', lastSynced: new Date() },
+    });
 
     return {
       success: true,
@@ -183,17 +183,21 @@ export class CommandExecutor {
       return { success: false, message: 'PR title and file changes are required' };
     }
 
-    const id = uuidv4();
-    await pool.query(
-      `INSERT INTO pull_requests (id, user_id, repository_id, title, description, status, file_changes)
-       VALUES ($1, $2, $3, $4, $5, 'open', $6)`,
-      [id, command.userId, command.repoId, params.title, params.description || null, JSON.stringify(params.files)]
-    );
+    const pr = await prisma.pullRequest.create({
+      data: {
+        userId: command.userId,
+        repositoryId: command.repoId,
+        title: params.title,
+        description: params.description || null,
+        status: 'open',
+        fileChanges: params.files as object[],
+      },
+    });
 
     return {
       success: true,
       message: `Pull request created: ${params.title}`,
-      data: { prId: id, title: params.title },
+      data: { prId: pr.id, title: params.title },
     };
   }
 
@@ -201,16 +205,11 @@ export class CommandExecutor {
     const params = command.params as PrMergeParams | undefined;
     if (!params?.prId) return { success: false, message: 'PR ID is required' };
 
-    const prResult = await pool.query(
-      'SELECT * FROM pull_requests WHERE id = $1 AND user_id = $2',
-      [params.prId, command.userId]
-    );
+    const pr = await prisma.pullRequest.findFirst({
+      where: { id: params.prId, userId: command.userId },
+    });
 
-    if (prResult.rows.length === 0) {
-      return { success: false, message: 'Pull request not found' };
-    }
-
-    const pr = prResult.rows[0];
+    if (!pr) return { success: false, message: 'Pull request not found' };
     if (pr.status !== 'open' && pr.status !== 'approved') {
       return { success: false, message: `Cannot merge PR with status: ${pr.status}` };
     }
@@ -218,7 +217,7 @@ export class CommandExecutor {
     const repo = await localRepoManager.getRepo(command.repoId, command.userId);
     if (!repo) return { success: false, message: 'Repository not found' };
 
-    const fileChanges = pr.file_changes as Array<{ path: string; modified: string }>;
+    const fileChanges = pr.fileChanges as Array<{ path: string; modified: string }>;
     const merged: string[] = [];
 
     for (const change of fileChanges) {
@@ -226,10 +225,10 @@ export class CommandExecutor {
       merged.push(change.path);
     }
 
-    await pool.query(
-      'UPDATE pull_requests SET status = $1, merged_at = NOW() WHERE id = $2',
-      ['merged', params.prId]
-    );
+    await prisma.pullRequest.update({
+      where: { id: params.prId },
+      data: { status: 'merged', mergedAt: new Date() },
+    });
 
     return {
       success: true,
@@ -238,15 +237,21 @@ export class CommandExecutor {
     };
   }
 
-  private async logCommandStart(logId: string, command: Command): Promise<void> {
+  private async logCommandStart(command: Command): Promise<string> {
     try {
-      await pool.query(
-        `INSERT INTO command_logs (id, user_id, repository_id, command_type, params, status)
-         VALUES ($1, $2, $3, $4, $5, 'running')`,
-        [logId, command.userId, command.repoId, command.type, JSON.stringify(command.params || {})]
-      );
+      const log = await prisma.commandLog.create({
+        data: {
+          userId: command.userId,
+          repositoryId: command.repoId,
+          commandType: command.type,
+          params: (command.params || {}) as object,
+          status: 'running',
+        },
+      });
+      return log.id;
     } catch {
-      // Non-critical: continue even if logging fails
+      // Non-critical: return a dummy id
+      return 'no-log';
     }
   }
 
@@ -257,12 +262,18 @@ export class CommandExecutor {
     durationMs: number,
     error?: string
   ): Promise<void> {
+    if (logId === 'no-log') return;
     try {
-      await pool.query(
-        `UPDATE command_logs SET status = $1, result = $2, duration_ms = $3, error_message = $4, completed_at = NOW()
-         WHERE id = $5`,
-        [status, JSON.stringify(result), durationMs, error || null, logId]
-      );
+      await prisma.commandLog.update({
+        where: { id: logId },
+        data: {
+          status,
+          result: result as object,
+          durationMs,
+          errorMessage: error || null,
+          completedAt: new Date(),
+        },
+      });
     } catch {
       // Non-critical
     }

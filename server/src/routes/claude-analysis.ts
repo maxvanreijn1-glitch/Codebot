@@ -5,7 +5,7 @@ import { CODE_ANALYSIS_SYSTEM_PROMPT } from '../services/claude/prompts';
 import { streamAnalysis } from '../services/claude/streaming';
 import { checkAndIncrementUsage } from '../utils/usage';
 import { parseJsonResponse } from '../utils/json';
-import { pool } from '../db';
+import prisma from '../prisma/client';
 
 const router = Router();
 router.use(authenticateToken);
@@ -46,13 +46,18 @@ router.post('/analyze', async (req: AuthRequest, res: Response): Promise<void> =
       suggestions: [],
     };
 
-    const analysisRecord = await pool.query(
-      'INSERT INTO analyses (user_id, repository_id, prompt, result, status) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [req.user!.id, repositoryId || null, prompt, JSON.stringify(result), 'completed']
-    );
+    const analysisRecord = await prisma.analysis.create({
+      data: {
+        userId: req.user!.id,
+        repositoryId: repositoryId || null,
+        prompt,
+        result: result as object,
+        status: 'completed',
+      },
+    });
 
     res.status(201).json({
-      ...analysisRecord.rows[0],
+      ...analysisRecord,
       result,
       tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
     });
@@ -66,20 +71,23 @@ router.post('/analyze', async (req: AuthRequest, res: Response): Promise<void> =
 router.get('/suggestions', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { repositoryId } = req.query;
-    let query = `SELECT a.*, r.name as repository_name
-                 FROM analyses a
-                 LEFT JOIN repositories r ON a.repository_id = r.id
-                 WHERE a.user_id = $1 AND a.status = 'completed'`;
-    const params: unknown[] = [req.user!.id];
 
-    if (repositoryId) {
-      query += ' AND a.repository_id = $2';
-      params.push(repositoryId);
-    }
+    const analyses = await prisma.analysis.findMany({
+      where: {
+        userId: req.user!.id,
+        status: 'completed',
+        ...(repositoryId ? { repositoryId: String(repositoryId) } : {}),
+      },
+      include: { repository: { select: { name: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
 
-    query += ' ORDER BY a.created_at DESC LIMIT 20';
-    const result = await pool.query(query, params);
-    res.json(result.rows);
+    const mapped = analyses.map(({ repository, ...a }) => ({
+      ...a,
+      repository_name: repository?.name ?? null,
+    }));
+    res.json(mapped);
   } catch (error) {
     console.error('Get suggestions error:', error);
     res.status(500).json({ error: 'Failed to get suggestions' });

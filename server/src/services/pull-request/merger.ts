@@ -1,6 +1,6 @@
 import { localRepoManager } from '../local-repo/manager';
 import { prManager, FileChange } from './manager';
-import { pool } from '../../db';
+import prisma from '../../prisma/client';
 
 export interface MergeResult {
   success: boolean;
@@ -43,10 +43,10 @@ export class PRMerger {
       }
     }
 
-    await pool.query(
-      'UPDATE pull_requests SET status = $1, merged_at = NOW(), updated_at = NOW() WHERE id = $2',
-      ['merged', prId]
-    );
+    await prisma.pullRequest.update({
+      where: { id: prId },
+      data: { status: 'merged', mergedAt: new Date() },
+    });
 
     await localRepoManager.updateSyncStatus(pr.repositoryId);
 
@@ -77,10 +77,10 @@ export class PRMerger {
       }
     }
 
-    await pool.query(
-      "UPDATE pull_requests SET status = 'open', merged_at = NULL, updated_at = NOW() WHERE id = $1",
-      [prId]
-    );
+    await prisma.pullRequest.update({
+      where: { id: prId },
+      data: { status: 'open', mergedAt: null },
+    });
 
     return { success: true, mergedFiles: revertedFiles, skippedFiles };
   }

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import Stripe from 'stripe';
-import { pool } from '../db';
+import prisma from '../prisma/client';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
@@ -53,18 +53,27 @@ router.post('/create-intent', authenticateToken, async (req: AuthRequest, res: R
 
   try {
     let customerId: string | undefined = undefined;
-    const userResult = await pool.query('SELECT stripe_customer_id, email, name FROM users WHERE id = $1', [req.user!.id]);
-    const user = userResult.rows[0];
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: { stripeCustomerId: true, email: true, name: true },
+    });
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
 
-    if (user.stripe_customer_id) {
-      customerId = user.stripe_customer_id;
+    if (user.stripeCustomerId) {
+      customerId = user.stripeCustomerId;
     } else {
       const customer = await stripe.customers.create({
         email: user.email,
         name: user.name,
         metadata: { userId: req.user!.id },
       });
-      await pool.query('UPDATE users SET stripe_customer_id = $1 WHERE id = $2', [customer.id, req.user!.id]);
+      await prisma.user.update({
+        where: { id: req.user!.id },
+        data: { stripeCustomerId: customer.id },
+      });
       customerId = customer.id;
     }
 
@@ -75,10 +84,16 @@ router.post('/create-intent', authenticateToken, async (req: AuthRequest, res: R
       metadata: { userId: req.user!.id, tier },
     });
 
-    await pool.query(
-      'INSERT INTO payments (user_id, stripe_payment_intent_id, amount, currency, tier, status) VALUES ($1, $2, $3, $4, $5, $6)',
-      [req.user!.id, paymentIntent.id, plan.amount, plan.currency, tier, 'pending']
-    );
+    await prisma.payment.create({
+      data: {
+        userId: req.user!.id,
+        stripePaymentIntentId: paymentIntent.id,
+        amount: plan.amount,
+        currency: plan.currency,
+        tier,
+        status: 'pending',
+      },
+    });
 
     res.json({ clientSecret: paymentIntent.client_secret, paymentIntentId: paymentIntent.id });
   } catch (error) {
@@ -108,21 +123,21 @@ router.post('/confirm', authenticateToken, async (req: AuthRequest, res: Respons
       return;
     }
 
-    await pool.query(
-      'UPDATE users SET tier = $1, usage_limit = $2 WHERE id = $3',
-      [tier, plan.usageLimit, req.user!.id]
-    );
-    await pool.query(
-      'UPDATE payments SET status = $1 WHERE stripe_payment_intent_id = $2',
-      ['succeeded', paymentIntentId]
-    );
+    await prisma.user.update({
+      where: { id: req.user!.id },
+      data: { tier: tier as 'pro' | 'premium', usageLimit: plan.usageLimit },
+    });
+    await prisma.payment.updateMany({
+      where: { stripePaymentIntentId: paymentIntentId },
+      data: { status: 'succeeded' },
+    });
 
-    const userResult = await pool.query(
-      'SELECT id, email, name, tier, usage_count, usage_limit FROM users WHERE id = $1',
-      [req.user!.id]
-    );
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: { id: true, email: true, name: true, tier: true, usageCount: true, usageLimit: true },
+    });
 
-    res.json({ success: true, user: userResult.rows[0] });
+    res.json({ success: true, user });
   } catch (error) {
     console.error('Confirm payment error:', error);
     res.status(500).json({ error: 'Failed to confirm payment' });
@@ -148,14 +163,14 @@ router.post('/webhook', async (req: Request, res: Response): Promise<void> => {
     const plan = PLANS[tier];
 
     if (userId && plan) {
-      await pool.query(
-        'UPDATE users SET tier = $1, usage_limit = $2 WHERE id = $3',
-        [tier, plan.usageLimit, userId]
-      );
-      await pool.query(
-        'UPDATE payments SET status = $1 WHERE stripe_payment_intent_id = $2',
-        ['succeeded', intent.id]
-      );
+      await prisma.user.update({
+        where: { id: userId },
+        data: { tier: tier as 'pro' | 'premium', usageLimit: plan.usageLimit },
+      });
+      await prisma.payment.updateMany({
+        where: { stripePaymentIntentId: intent.id },
+        data: { status: 'succeeded' },
+      });
     }
   }
 

@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
-import { pool } from '../db';
+import prisma from '../prisma/client';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { analyzeCode } from '../utils/openai';
 import { checkAndIncrementUsage } from '../utils/usage';
@@ -27,45 +27,44 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
     let codeContent = code || '';
 
     if (repositoryId && !code) {
-      const repoResult = await pool.query(
-        'SELECT * FROM repositories WHERE id = $1 AND user_id = $2',
-        [repositoryId, req.user!.id]
-      );
-      if (repoResult.rows.length > 0) {
-        const repo = repoResult.rows[0];
-        if (repo.file_path && fs.existsSync(repo.file_path)) {
-          const files = fs.readdirSync(repo.file_path);
-          const fileContents: string[] = [];
-          for (const file of files.slice(0, 20)) {
-            const filePath = path.join(repo.file_path, file);
-            if (fs.statSync(filePath).isFile()) {
-              const content = fs.readFileSync(filePath, 'utf-8');
-              fileContents.push(`### File: ${file}\n\`\`\`\n${content}\n\`\`\``);
-            }
+      const repo = await prisma.repository.findFirst({
+        where: { id: repositoryId, userId: req.user!.id },
+      });
+      if (repo?.filePath && fs.existsSync(repo.filePath)) {
+        const files = fs.readdirSync(repo.filePath);
+        const fileContents: string[] = [];
+        for (const file of files.slice(0, 20)) {
+          const filePath = path.join(repo.filePath, file);
+          if (fs.statSync(filePath).isFile()) {
+            const content = fs.readFileSync(filePath, 'utf-8');
+            fileContents.push(`### File: ${file}\n\`\`\`\n${content}\n\`\`\``);
           }
-          codeContent = fileContents.join('\n\n');
         }
+        codeContent = fileContents.join('\n\n');
       }
     }
 
-    const analysisResult = await pool.query(
-      'INSERT INTO analyses (user_id, repository_id, prompt, status) VALUES ($1, $2, $3, $4) RETURNING *',
-      [req.user!.id, repositoryId || null, prompt, 'processing']
-    );
-    const analysis = analysisResult.rows[0];
+    const analysis = await prisma.analysis.create({
+      data: {
+        userId: req.user!.id,
+        repositoryId: repositoryId || null,
+        prompt,
+        status: 'processing',
+      },
+    });
 
     try {
       const result = await analyzeCode(codeContent, prompt);
-      await pool.query(
-        'UPDATE analyses SET result = $1, status = $2 WHERE id = $3',
-        [JSON.stringify(result), 'completed', analysis.id]
-      );
-      res.status(201).json({ ...analysis, result, status: 'completed' });
+      const updated = await prisma.analysis.update({
+        where: { id: analysis.id },
+        data: { result: result as object, status: 'completed' },
+      });
+      res.status(201).json({ ...updated, result, status: 'completed' });
     } catch (aiError) {
-      await pool.query(
-        'UPDATE analyses SET status = $1 WHERE id = $2',
-        ['failed', analysis.id]
-      );
+      await prisma.analysis.update({
+        where: { id: analysis.id },
+        data: { status: 'failed' },
+      });
       console.error('AI analysis error:', aiError);
       res.status(500).json({ error: 'Analysis failed' });
     }
@@ -77,15 +76,16 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
 
 router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const result = await pool.query(
-      `SELECT a.*, r.name as repository_name 
-       FROM analyses a 
-       LEFT JOIN repositories r ON a.repository_id = r.id 
-       WHERE a.user_id = $1 
-       ORDER BY a.created_at DESC`,
-      [req.user!.id]
-    );
-    res.json(result.rows);
+    const analyses = await prisma.analysis.findMany({
+      where: { userId: req.user!.id },
+      include: { repository: { select: { name: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+    const mapped = analyses.map(({ repository, ...a }) => ({
+      ...a,
+      repository_name: repository?.name ?? null,
+    }));
+    res.json(mapped);
   } catch (error) {
     console.error('List analyses error:', error);
     res.status(500).json({ error: 'Failed to list analyses' });
@@ -94,18 +94,16 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
 
 router.get('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const result = await pool.query(
-      `SELECT a.*, r.name as repository_name 
-       FROM analyses a 
-       LEFT JOIN repositories r ON a.repository_id = r.id 
-       WHERE a.id = $1 AND a.user_id = $2`,
-      [req.params.id, req.user!.id]
-    );
-    if (result.rows.length === 0) {
+    const analysis = await prisma.analysis.findFirst({
+      where: { id: req.params.id, userId: req.user!.id },
+      include: { repository: { select: { name: true } } },
+    });
+    if (!analysis) {
       res.status(404).json({ error: 'Analysis not found' });
       return;
     }
-    res.json(result.rows[0]);
+    const { repository, ...rest } = analysis;
+    res.json({ ...rest, repository_name: repository?.name ?? null });
   } catch (error) {
     console.error('Get analysis error:', error);
     res.status(500).json({ error: 'Failed to get analysis' });

@@ -1,38 +1,31 @@
-import { pool } from '../db';
+import prisma from '../prisma/client';
 
 export async function checkAndIncrementUsage(userId: string): Promise<boolean> {
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
-    const result = await client.query(
-      'SELECT usage_count, usage_limit FROM users WHERE id = $1 FOR UPDATE',
-      [userId]
-    );
-    if (result.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return false;
-    }
-    const { usage_count, usage_limit } = result.rows[0];
-    if (usage_count >= usage_limit) {
-      await client.query('ROLLBACK');
-      return false;
-    }
-    await client.query(
-      'UPDATE users SET usage_count = usage_count + 1 WHERE id = $1',
-      [userId]
-    );
-    await client.query('COMMIT');
-    return true;
+    const result = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({
+        where: { id: userId },
+        select: { usageCount: true, usageLimit: true },
+      });
+      if (!user) return false;
+      if (user.usageCount >= user.usageLimit) return false;
+      await tx.user.update({
+        where: { id: userId },
+        data: { usageCount: { increment: 1 } },
+      });
+      return true;
+    });
+    return result;
   } catch (error) {
-    await client.query('ROLLBACK');
     throw error;
-  } finally {
-    client.release();
   }
 }
 
 export async function resetUsage(userId: string): Promise<void> {
-  await pool.query('UPDATE users SET usage_count = 0 WHERE id = $1', [userId]);
+  await prisma.user.update({
+    where: { id: userId },
+    data: { usageCount: 0 },
+  });
 }
 
 export const TIER_LIMITS = {
