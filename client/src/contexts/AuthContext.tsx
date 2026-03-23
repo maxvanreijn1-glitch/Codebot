@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { AxiosError } from 'axios';
 import apiClient from '../api/client';
 
 interface User {
@@ -57,11 +58,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function register(email: string, password: string, name: string) {
-    const response = await apiClient.post('/auth/register', { email, password, name });
-    const { token: newToken, user: newUser } = response.data;
-    localStorage.setItem('token', newToken);
-    setToken(newToken);
-    setUser(newUser);
+    try {
+      const response = await apiClient.post('/auth/register', { email, password, name });
+      const { token: newToken, user: newUser } = response.data;
+      localStorage.setItem('token', newToken);
+      setToken(newToken);
+      setUser(newUser);
+    } catch (error: unknown) {
+      const axiosError = error as AxiosError<{ error?: string }>;
+      const message = axiosError.response?.data?.error || 'Registration failed';
+      console.error('Register error:', message);
+      throw new Error(message);
+    }
   }
 
   function logout() {
