@@ -1,10 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, Loader2, Cpu, Trash2, Download, Wrench, Eye, Code2, RefreshCw } from 'lucide-react';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import CircuitVisualizer, { CircuitLayout } from '../components/CircuitVisualizer';
-
-// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Message {
   role: 'user' | 'assistant';
@@ -12,8 +8,6 @@ interface Message {
 }
 
 type Tab = 'chat' | 'circuit' | 'troubleshoot';
-
-// ─── Message renderer ─────────────────────────────────────────────────────────
 
 function MessageContent({ content }: { content: string }) {
   const parts: React.ReactNode[] = [];
@@ -45,13 +39,9 @@ function MessageContent({ content }: { content: string }) {
             copy
           </button>
         </div>
-        <SyntaxHighlighter
-          language={lang === 'ino' ? 'cpp' : lang}
-          style={vscDarkPlus}
-          customStyle={{ margin: 0, borderRadius: 0, fontSize: '0.8rem' }}
-        >
-          {code}
-        </SyntaxHighlighter>
+        <pre className="bg-gray-950 rounded-b-lg p-4 overflow-x-auto text-sm text-green-400 font-mono whitespace-pre-wrap">
+          <code>{code}</code>
+        </pre>
       </div>,
     );
     lastIndex = match.index + match[0].length;
@@ -67,8 +57,6 @@ function MessageContent({ content }: { content: string }) {
 
   return <div className="text-sm leading-relaxed">{parts}</div>;
 }
-
-// ─── Streaming helper ─────────────────────────────────────────────────────────
 
 async function streamPost(
   endpoint: string,
@@ -113,13 +101,11 @@ async function streamPost(
   }
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
-
 const CHAT_SUGGESTIONS = [
   'Blink an LED on pin 13 every 500 ms',
   'Read a button on pin 2 and turn on an LED when pressed',
   'Control a servo motor with a potentiometer',
-  'Display a counter on a 16×2 LCD display',
+  'Display a counter on a 16x2 LCD display',
 ];
 
 const TROUBLE_EXAMPLES = [
@@ -132,21 +118,18 @@ const TROUBLE_EXAMPLES = [
 export default function ArduinoAssistant() {
   const [activeTab, setActiveTab] = useState<Tab>('chat');
 
-  // ── Chat state ──────────────────────────────────────────────────────────────
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatStreaming, setChatStreaming] = useState(false);
   const [chatError, setChatError] = useState('');
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
-  // ── Circuit state ───────────────────────────────────────────────────────────
   const [circuitLayout, setCircuitLayout] = useState<CircuitLayout>({ components: [], wires: [] });
   const [circuitCode, setCircuitCode] = useState('');
   const [circuitLoading, setCircuitLoading] = useState(false);
   const [circuitError, setCircuitError] = useState('');
   const [generatedCode, setGeneratedCode] = useState('');
 
-  // ── Troubleshoot state ──────────────────────────────────────────────────────
   const [troubleInput, setTroubleInput] = useState('');
   const [troubleResult, setTroubleResult] = useState('');
   const [troubleStreaming, setTroubleStreaming] = useState(false);
@@ -160,8 +143,6 @@ export default function ArduinoAssistant() {
   useEffect(() => {
     troubleBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [troubleResult, troubleStreaming]);
-
-  // ── Chat handlers ────────────────────────────────────────────────────────────
 
   const sendChat = async (text: string) => {
     if (!text.trim() || chatStreaming) return;
@@ -196,8 +177,6 @@ export default function ArduinoAssistant() {
     }
   };
 
-  // ── Circuit handlers ─────────────────────────────────────────────────────────
-
   const generateCodeFromCircuit = async () => {
     if (circuitLayout.components.length === 0) {
       setCircuitError('Add some components to the circuit first');
@@ -215,7 +194,7 @@ export default function ArduinoAssistant() {
               .map((w) => {
                 const from = circuitLayout.components.find((c) => c.id === w.fromComponentId);
                 const to = circuitLayout.components.find((c) => c.id === w.toComponentId);
-                return `${from?.label ?? w.fromComponentId}:${w.fromPin} → ${to?.label ?? w.toComponentId}:${w.toPin}`;
+                return `${from?.label ?? w.fromComponentId}:${w.fromPin} -> ${to?.label ?? w.toComponentId}:${w.toPin}`;
               })
               .join('; ')
           : 'none specified'
@@ -254,7 +233,6 @@ export default function ArduinoAssistant() {
         throw new Error((data as { error?: string }).error || 'Circuit generation failed');
       }
       const data = await response.json() as { circuit: { components: unknown[]; wires: unknown[] } };
-      // Map AI response to CircuitLayout (best-effort)
       const aiComponents = data.circuit?.components ?? [];
       const mapped: CircuitLayout = {
         components: aiComponents.map((c: unknown, i: number) => {
@@ -287,8 +265,6 @@ export default function ArduinoAssistant() {
     URL.revokeObjectURL(url);
   };
 
-  // ── Troubleshoot handlers ────────────────────────────────────────────────────
-
   const runTroubleshoot = async (problem: string) => {
     if (!problem.trim() || troubleStreaming) return;
     setTroubleError('');
@@ -305,8 +281,6 @@ export default function ArduinoAssistant() {
     }
   };
 
-  // ── Tabs ─────────────────────────────────────────────────────────────────────
-
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'chat', label: 'Chat & Code', icon: <Cpu className="w-4 h-4" /> },
     { id: 'circuit', label: 'Circuit Visualizer', icon: <Eye className="w-4 h-4" /> },
@@ -315,7 +289,6 @@ export default function ArduinoAssistant() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
-      {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-white flex items-center gap-2">
           <Cpu className="w-6 h-6 text-sky-400" />
@@ -326,7 +299,6 @@ export default function ArduinoAssistant() {
         </p>
       </div>
 
-      {/* Tab bar */}
       <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-xl p-1 mb-6 w-fit">
         {tabs.map((tab) => (
           <button
@@ -344,7 +316,6 @@ export default function ArduinoAssistant() {
         ))}
       </div>
 
-      {/* ── Chat Tab ─────────────────────────────────────────────────────────── */}
       {activeTab === 'chat' && (
         <div className="flex flex-col h-[calc(100vh-18rem)]">
           <div className="flex items-center justify-between mb-3">
@@ -388,7 +359,7 @@ export default function ArduinoAssistant() {
                 >
                   {msg.role === 'assistant' ? (
                     <MessageContent
-                      content={msg.content || (chatStreaming && i === chatMessages.length - 1 ? '▍' : '')}
+                      content={msg.content || (chatStreaming && i === chatMessages.length - 1 ? 'thinking...' : '')}
                     />
                   ) : (
                     <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
@@ -412,7 +383,7 @@ export default function ArduinoAssistant() {
                 if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(chatInput); }
               }}
               rows={1}
-              placeholder="Describe your Arduino project…"
+              placeholder="Describe your Arduino project..."
               className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-sky-500 resize-none text-sm transition-colors"
               disabled={chatStreaming}
             />
@@ -427,10 +398,8 @@ export default function ArduinoAssistant() {
         </div>
       )}
 
-      {/* ── Circuit Tab ───────────────────────────────────────────────────────── */}
       {activeTab === 'circuit' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left: canvas */}
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 flex flex-col" style={{ height: '60vh' }}>
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-white">Circuit Canvas</h2>
@@ -450,9 +419,7 @@ export default function ArduinoAssistant() {
             </div>
           </div>
 
-          {/* Right: Code area */}
           <div className="flex flex-col gap-4">
-            {/* Paste code → generate circuit */}
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
               <h2 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
                 <RefreshCw className="w-4 h-4 text-sky-400" />
@@ -462,7 +429,7 @@ export default function ArduinoAssistant() {
                 value={circuitCode}
                 onChange={(e) => setCircuitCode(e.target.value)}
                 rows={6}
-                placeholder="Paste your Arduino .ino code here…"
+                placeholder="Paste your Arduino .ino code here..."
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-sky-500 font-mono text-xs resize-none transition-colors mb-3"
               />
               <button
@@ -475,7 +442,6 @@ export default function ArduinoAssistant() {
               </button>
             </div>
 
-            {/* Generated code */}
             {generatedCode && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 flex-1 overflow-y-auto">
                 <div className="flex items-center justify-between mb-2">
@@ -500,7 +466,6 @@ export default function ArduinoAssistant() {
         </div>
       )}
 
-      {/* ── Troubleshoot Tab ──────────────────────────────────────────────────── */}
       {activeTab === 'troubleshoot' && (
         <div className="max-w-3xl">
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
@@ -509,7 +474,6 @@ export default function ArduinoAssistant() {
               Paste compiler errors, describe unexpected behaviour, or upload your code.
             </p>
 
-            {/* Quick examples */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
               {TROUBLE_EXAMPLES.map((ex) => (
                 <button
@@ -526,7 +490,7 @@ export default function ArduinoAssistant() {
               value={troubleInput}
               onChange={(e) => setTroubleInput(e.target.value)}
               rows={5}
-              placeholder="e.g. error: 'pinNumber' was not declared in this scope&#10;&#10;Or: My servo jitters even though the code looks correct..."
+              placeholder="e.g. error: 'pinNumber' was not declared in this scope"
               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-sky-500 font-mono text-sm resize-none transition-colors mb-4"
             />
             <button
@@ -535,7 +499,7 @@ export default function ArduinoAssistant() {
               className="flex items-center gap-2 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors"
             >
               {troubleStreaming ? (
-                <><Loader2 className="w-4 h-4 animate-spin" /> Diagnosing…</>
+                <><Loader2 className="w-4 h-4 animate-spin" /> Diagnosing...</>
               ) : (
                 <><Wrench className="w-4 h-4" /> Diagnose</>
               )}
@@ -545,10 +509,7 @@ export default function ArduinoAssistant() {
           {(troubleResult || troubleStreaming) && (
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 mt-4">
               <h2 className="text-sm font-semibold text-white mb-3">Diagnosis</h2>
-              <MessageContent content={troubleResult || (troubleStreaming ? '▍' : '')} />
-              {troubleStreaming && (
-                <span className="inline-block w-2 h-4 bg-gray-400 animate-pulse ml-1" />
-              )}
+              <MessageContent content={troubleResult || (troubleStreaming ? 'Diagnosing...' : '')} />
               <div ref={troubleBottomRef} />
             </div>
           )}
