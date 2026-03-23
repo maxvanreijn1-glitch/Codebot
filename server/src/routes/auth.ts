@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 
@@ -24,15 +25,16 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
     console.warn('WARNING: JWT_SECRET is not set. Using insecure fallback secret.');
   }
   try {
-    const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+    const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email.toLowerCase().trim()]);
     if (existing.rows.length > 0) {
       res.status(409).json({ error: 'Email already registered' });
       return;
     }
     const passwordHash = await bcrypt.hash(password, 12);
+    const id = uuidv4();
     const result = await pool.query(
-      'INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3) RETURNING id, email, name, tier, usage_count, usage_limit',
-      [email.toLowerCase().trim(), passwordHash, name.trim()]
+      'INSERT INTO users (id, email, password_hash, name) VALUES ($1, $2, $3, $4) RETURNING id, email, name, tier, usage_count, usage_limit',
+      [id, email.toLowerCase().trim(), passwordHash, name.trim()]
     );
     const user = result.rows[0];
     const token = jwt.sign(
