@@ -8,7 +8,7 @@ datasource db {
 }
 
 model User {
-  id            String       @id @default(cuid())
+  id            String       @id @default(uuid())
   email         String       @unique
   password_hash String
   name          String?
@@ -21,7 +21,7 @@ model User {
 }
 
 model Repository {
-  id          String     @id @default(cuid())
+  id          String     @id @default(uuid())
   name        String
   description String?
   userId      String
@@ -33,7 +33,7 @@ model Repository {
 }
 
 model Analysis {
-  id           String     @id @default(cuid())
+  id           String     @id @default(uuid())
   repositoryId String
   repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
   userId       String
