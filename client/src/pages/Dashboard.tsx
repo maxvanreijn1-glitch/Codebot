@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import apiClient from '../api/client';
 import UsageBar from '../components/UsageBar';
 import { Repository, Analysis } from '../types';
-import { FolderOpen, Activity, Plus, Clock, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { FolderOpen, Activity, Plus, Clock, CheckCircle, XCircle, Loader2, Code2, Cpu } from 'lucide-react';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -72,6 +72,45 @@ export default function Dashboard() {
             <UsageBar current={user.usage_count} limit={user.usage_limit} tier={user.tier} />
           )}
         </div>
+      </div>
+
+      {/* AI Assistants */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <Link
+          to="/web-assistant"
+          className="bg-gray-900 border border-gray-800 hover:border-sky-700 rounded-xl p-6 transition-colors group"
+        >
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 bg-sky-900/40 rounded-lg group-hover:bg-sky-900/70 transition-colors">
+              <Code2 className="w-5 h-5 text-sky-400" />
+            </div>
+            <h3 className="text-white font-semibold">Web &amp; App Assistant</h3>
+          </div>
+          <p className="text-gray-400 text-sm">
+            Get AI help with HTML, CSS, JavaScript, React, Node.js, SQL and more.
+          </p>
+          <span className="mt-4 inline-flex items-center text-sky-400 text-sm group-hover:text-sky-300 transition-colors">
+            Open assistant →
+          </span>
+        </Link>
+
+        <Link
+          to="/arduino-assistant"
+          className="bg-gray-900 border border-gray-800 hover:border-sky-700 rounded-xl p-6 transition-colors group"
+        >
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 bg-green-900/40 rounded-lg group-hover:bg-green-900/70 transition-colors">
+              <Cpu className="w-5 h-5 text-green-400" />
+            </div>
+            <h3 className="text-white font-semibold">Arduino Circuit Assistant</h3>
+          </div>
+          <p className="text-gray-400 text-sm">
+            Chat, generate Arduino sketches, build circuits visually, and troubleshoot hardware issues.
+          </p>
+          <span className="mt-4 inline-flex items-center text-sky-400 text-sm group-hover:text-sky-300 transition-colors">
+            Open assistant →
+          </span>
+        </Link>
       </div>
 
       {/* Recent Analyses */}
