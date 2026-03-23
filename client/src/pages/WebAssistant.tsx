@@ -1,14 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, Loader2, Code2, Trash2 } from 'lucide-react';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
 }
 
-// Simple markdown-like renderer that handles code blocks with syntax highlighting
 function MessageContent({ content }: { content: string }) {
   const parts: React.ReactNode[] = [];
   const codeBlockRegex = /```(\w*)\n?([\s\S]*?)```/g;
@@ -31,13 +28,9 @@ function MessageContent({ content }: { content: string }) {
           <Code2 className="w-3.5 h-3.5 text-sky-400" />
           <span className="text-gray-400 text-xs">{lang}</span>
         </div>
-        <SyntaxHighlighter
-          language={lang}
-          style={vscDarkPlus}
-          customStyle={{ margin: 0, borderRadius: 0, fontSize: '0.8rem' }}
-        >
-          {code}
-        </SyntaxHighlighter>
+        <pre className="bg-gray-950 rounded-b-lg p-4 overflow-x-auto text-sm text-green-400 font-mono whitespace-pre-wrap">
+          <code>{code}</code>
+        </pre>
       </div>,
     );
     lastIndex = match.index + match[0].length;
@@ -81,8 +74,6 @@ export default function WebAssistant() {
     setMessages((prev) => [...prev, userMsg]);
     setInput('');
     setStreaming(true);
-
-    // placeholder assistant message that we'll fill in
     setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
 
     try {
@@ -98,7 +89,7 @@ export default function WebAssistant() {
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || 'Request failed');
+        throw new Error((data as { error?: string }).error || 'Request failed');
       }
 
       const reader = response.body?.getReader();
@@ -117,7 +108,7 @@ export default function WebAssistant() {
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
           try {
-            const parsed = JSON.parse(line.slice(6));
+            const parsed = JSON.parse(line.slice(6)) as { text?: string };
             if (parsed.text) {
               setMessages((prev) => {
                 const updated = [...prev];
@@ -136,7 +127,6 @@ export default function WebAssistant() {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Request failed';
       setError(msg);
-      // remove empty placeholder
       setMessages((prev) => {
         const updated = [...prev];
         if (updated[updated.length - 1]?.content === '') updated.pop();
@@ -154,7 +144,6 @@ export default function WebAssistant() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 flex flex-col h-[calc(100vh-4rem)]">
-      {/* Header */}
       <div className="flex items-center justify-between mb-6 flex-shrink-0">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
@@ -162,7 +151,7 @@ export default function WebAssistant() {
             Web &amp; App Assistant
           </h1>
           <p className="text-gray-400 text-sm mt-1">
-            Ask anything about web or app development – HTML, CSS, JS, React, Node, SQL, and more
+            Ask anything about web or app development - HTML, CSS, JS, React, Node, SQL, and more
           </p>
         </div>
         {messages.length > 0 && (
@@ -175,7 +164,6 @@ export default function WebAssistant() {
         )}
       </div>
 
-      {/* Chat area */}
       <div className="flex-1 overflow-y-auto space-y-4 mb-4 min-h-0">
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center">
@@ -196,10 +184,7 @@ export default function WebAssistant() {
         )}
 
         {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-          >
+          <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div
               className={`max-w-[80%] px-4 py-3 rounded-2xl ${
                 msg.role === 'user'
@@ -208,7 +193,7 @@ export default function WebAssistant() {
               }`}
             >
               {msg.role === 'assistant' ? (
-                <MessageContent content={msg.content || (streaming && i === messages.length - 1 ? '▍' : '')} />
+                <MessageContent content={msg.content || (streaming && i === messages.length - 1 ? 'thinking...' : '')} />
               ) : (
                 <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
               )}
@@ -216,14 +201,10 @@ export default function WebAssistant() {
           </div>
         ))}
 
-        {error && (
-          <p className="text-center text-red-400 text-sm">{error}</p>
-        )}
-
+        {error && <p className="text-center text-red-400 text-sm">{error}</p>}
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
       <form onSubmit={handleSubmit} className="flex gap-2 flex-shrink-0">
         <textarea
           value={input}
@@ -235,7 +216,7 @@ export default function WebAssistant() {
             }
           }}
           rows={1}
-          placeholder="Ask about HTML, CSS, JavaScript, React, Node.js, SQL…"
+          placeholder="Ask about HTML, CSS, JavaScript, React, Node.js, SQL..."
           className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-sky-500 resize-none text-sm transition-colors"
           disabled={streaming}
         />
