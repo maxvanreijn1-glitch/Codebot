@@ -16,6 +16,13 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
     res.status(400).json({ error: 'Password must be at least 8 characters' });
     return;
   }
+  if (!process.env.JWT_SECRET) {
+    if (process.env.NODE_ENV === 'production') {
+      res.status(500).json({ error: 'Server configuration error' });
+      return;
+    }
+    console.warn('WARNING: JWT_SECRET is not set. Using insecure fallback secret.');
+  }
   try {
     const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
     if (existing.rows.length > 0) {
@@ -35,7 +42,9 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
     );
     res.status(201).json({ token, user });
   } catch (error) {
-    console.error('Register error:', error);
+    const err = error as Error;
+    console.error('Register error:', err.message || error);
+    console.error('Register error stack:', err.stack);
     res.status(500).json({ error: 'Registration failed' });
   }
 });
