@@ -9,6 +9,8 @@ import Dashboard from './pages/Dashboard';
 import Repository from './pages/Repository';
 import Analysis from './pages/Analysis';
 import Pricing from './pages/Pricing';
+import WebAssistant from './pages/WebAssistant';
+import ArduinoAssistant from './pages/ArduinoAssistant';
 
 export default function App() {
   return (
@@ -25,6 +27,8 @@ export default function App() {
             <Route path="/repository" element={<ProtectedRoute><Repository /></ProtectedRoute>} />
             <Route path="/analysis" element={<ProtectedRoute><Analysis /></ProtectedRoute>} />
             <Route path="/analysis/:id" element={<ProtectedRoute><Analysis /></ProtectedRoute>} />
+            <Route path="/web-assistant" element={<ProtectedRoute><WebAssistant /></ProtectedRoute>} />
+            <Route path="/arduino-assistant" element={<ProtectedRoute><ArduinoAssistant /></ProtectedRoute>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>

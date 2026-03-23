@@ -14,6 +14,7 @@ import localReposRoutes from './routes/local-repos';
 import pullRequestsRoutes from './routes/pull-requests';
 import commandsRoutes from './routes/commands';
 import copilotRoutes from './routes/copilot';
+import arduinoRoutes from './routes/arduino';
 
 dotenv.config();
 
@@ -58,6 +59,7 @@ app.use('/api/repos', localReposRoutes);
 app.use('/api/pull-requests', pullRequestsRoutes);
 app.use('/api/commands', commandsRoutes);
 app.use('/api/copilot', copilotRoutes);
+app.use('/api/arduino', arduinoRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
