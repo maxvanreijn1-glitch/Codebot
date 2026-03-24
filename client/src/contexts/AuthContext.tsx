@@ -9,6 +9,10 @@ interface User {
   tier: 'free' | 'pro' | 'premium';
   usage_count: number;
   usage_limit: number;
+  subscription_plan?: string;
+  subscription_status?: string;
+  code_generation_count?: number;
+  circuit_generation_count?: number;
 }
 
 interface AuthContextType {

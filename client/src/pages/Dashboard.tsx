@@ -4,7 +4,28 @@ import { useAuth } from '../contexts/AuthContext';
 import apiClient from '../api/client';
 import UsageBar from '../components/UsageBar';
 import { Repository, Analysis } from '../types';
-import { FolderOpen, Activity, Plus, Clock, CheckCircle, XCircle, Loader2, Code2, Cpu } from 'lucide-react';
+import {
+  FolderOpen, Activity, Plus, Clock, CheckCircle, XCircle, Loader2,
+  Code2, Cpu, Crown, Zap, Star,
+} from 'lucide-react';
+
+const PLAN_ICONS: Record<string, React.ReactNode> = {
+  free: <Zap className="w-4 h-4 text-gray-400" />,
+  pro: <Star className="w-4 h-4 text-sky-400" />,
+  premium: <Crown className="w-4 h-4 text-yellow-400" />,
+};
+
+const PLAN_LABELS: Record<string, string> = {
+  free: 'Free',
+  pro: 'Pro',
+  premium: 'Premium',
+};
+
+const GENERATION_LIMITS: Record<string, { code: number | null; circuit: number | null }> = {
+  free: { code: 10, circuit: 5 },
+  pro: { code: 100, circuit: 50 },
+  premium: { code: null, circuit: null },
+};
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -27,6 +48,11 @@ export default function Dashboard() {
     if (status === 'failed') return <XCircle className="w-4 h-4 text-red-400" />;
     return <Loader2 className="w-4 h-4 text-yellow-400 animate-spin" />;
   };
+
+  const tier = user?.tier ?? 'free';
+  const planLimits = GENERATION_LIMITS[tier] ?? GENERATION_LIMITS.free;
+  const codeUsed = user?.code_generation_count ?? 0;
+  const circuitUsed = user?.circuit_generation_count ?? 0;
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -52,7 +78,7 @@ export default function Dashboard() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
           <div className="flex items-center gap-3 mb-2">
             <FolderOpen className="w-5 h-5 text-sky-400" />
@@ -60,6 +86,7 @@ export default function Dashboard() {
           </div>
           <p className="text-3xl font-bold text-white">{repos.length}</p>
         </div>
+
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
           <div className="flex items-center gap-3 mb-2">
             <Activity className="w-5 h-5 text-purple-400" />
@@ -67,9 +94,94 @@ export default function Dashboard() {
           </div>
           <p className="text-3xl font-bold text-white">{analyses.length}</p>
         </div>
+
+        {/* Current Plan */}
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+          <div className="flex items-center gap-2 mb-3">
+            {PLAN_ICONS[tier]}
+            <span className="text-gray-400 text-sm">Current Plan</span>
+          </div>
+          <p className="text-2xl font-bold text-white mb-2">{PLAN_LABELS[tier]}</p>
+          {tier === 'free' && (
+            <Link to="/pricing" className="text-sky-400 hover:text-sky-300 text-xs transition-colors">
+              Upgrade →
+            </Link>
+          )}
+          {tier === 'pro' && (
+            <Link to="/pricing" className="text-sky-400 hover:text-sky-300 text-xs transition-colors">
+              Go Premium →
+            </Link>
+          )}
+          {tier === 'premium' && (
+            <span className="text-yellow-400 text-xs">All features unlocked</span>
+          )}
+        </div>
+
+        {/* API Usage */}
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
           {user && (
-            <UsageBar current={user.usage_count} limit={user.usage_limit} tier={user.tier} />
+            <UsageBar current={user.usage_count} limit={user.usage_limit} tier={tier} />
+          )}
+        </div>
+      </div>
+
+      {/* Generation Usage */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <Code2 className="w-5 h-5 text-sky-400" />
+            <h3 className="text-white font-semibold">Code Generations</h3>
+          </div>
+          {planLimits.code === null ? (
+            <p className="text-green-400 font-semibold">Unlimited</p>
+          ) : (
+            <>
+              <div className="flex justify-between text-sm mb-1">
+                <span className="text-gray-400">Used this month</span>
+                <span className="text-gray-300">{codeUsed} / {planLimits.code}</span>
+              </div>
+              <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${
+                    codeUsed / (planLimits.code as number) >= 0.9 ? 'bg-red-500' :
+                    codeUsed / (planLimits.code as number) >= 0.7 ? 'bg-yellow-500' : 'bg-sky-500'
+                  }`}
+                  style={{ width: `${Math.min((codeUsed / (planLimits.code as number)) * 100, 100)}%` }}
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                {(planLimits.code as number) - codeUsed} remaining
+              </p>
+            </>
+          )}
+        </div>
+
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <Cpu className="w-5 h-5 text-green-400" />
+            <h3 className="text-white font-semibold">Circuit Generations</h3>
+          </div>
+          {planLimits.circuit === null ? (
+            <p className="text-green-400 font-semibold">Unlimited</p>
+          ) : (
+            <>
+              <div className="flex justify-between text-sm mb-1">
+                <span className="text-gray-400">Used this month</span>
+                <span className="text-gray-300">{circuitUsed} / {planLimits.circuit}</span>
+              </div>
+              <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${
+                    circuitUsed / (planLimits.circuit as number) >= 0.9 ? 'bg-red-500' :
+                    circuitUsed / (planLimits.circuit as number) >= 0.7 ? 'bg-yellow-500' : 'bg-green-500'
+                  }`}
+                  style={{ width: `${Math.min((circuitUsed / (planLimits.circuit as number)) * 100, 100)}%` }}
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                {(planLimits.circuit as number) - circuitUsed} remaining
+              </p>
+            </>
           )}
         </div>
       </div>
