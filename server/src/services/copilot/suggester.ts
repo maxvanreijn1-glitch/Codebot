@@ -20,15 +20,20 @@ export class CopilotSuggester {
 
     const userMessage = `Generate improvement suggestions for this code${filePart}${langPart}:${contextPart}\n\n\`\`\`\n${request.code}\n\`\`\`\n\nProvide specific, actionable suggestions.`;
 
-    const response = await client.messages.create({
-      model: DEFAULT_MODEL,
-      max_tokens: MAX_TOKENS,
-      system: CODE_ANALYSIS_SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: userMessage }],
-    });
+    try {
+      const response = await client.messages.create({
+        model: DEFAULT_MODEL,
+        max_tokens: MAX_TOKENS,
+        system: CODE_ANALYSIS_SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: userMessage }],
+      });
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : '{}';
-    return this.parseAnalysisResult(text);
+      const text = response.content[0].type === 'text' ? response.content[0].text : '{}';
+      return this.parseAnalysisResult(text);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Suggestion generation failed';
+      throw new Error(msg);
+    }
   }
 
   private parseAnalysisResult(text: string): AnalysisResult {

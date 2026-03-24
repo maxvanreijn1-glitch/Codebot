@@ -25,20 +25,25 @@ export class CopilotAnalyzer {
 
     const userMessage = `Analyze this ${language} file named "${filename}":\n\n\`\`\`${language.toLowerCase()}\n${content}\n\`\`\``;
 
-    const response = await client.messages.create({
-      model: DEFAULT_MODEL,
-      max_tokens: MAX_TOKENS,
-      system: COPILOT_SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: userMessage }],
-    });
+    try {
+      const response = await client.messages.create({
+        model: DEFAULT_MODEL,
+        max_tokens: MAX_TOKENS,
+        system: COPILOT_SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: userMessage }],
+      });
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
-    const parsed = this.parseResponse(text);
+      const text = response.content[0].type === 'text' ? response.content[0].text : '';
+      const parsed = this.parseResponse(text);
 
-    return {
-      ...parsed,
-      tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
-    };
+      return {
+        ...parsed,
+        tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+      };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'File analysis failed';
+      throw new Error(msg);
+    }
   }
 
   async analyzeCodeSnippet(code: string, context?: string): Promise<AnalysisResult> {
@@ -48,20 +53,25 @@ export class CopilotAnalyzer {
       ? `Context: ${context}\n\nAnalyze this code:\n\`\`\`\n${code}\n\`\`\``
       : `Analyze this code:\n\`\`\`\n${code}\n\`\`\``;
 
-    const response = await client.messages.create({
-      model: DEFAULT_MODEL,
-      max_tokens: MAX_TOKENS,
-      system: COPILOT_SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: userMessage }],
-    });
+    try {
+      const response = await client.messages.create({
+        model: DEFAULT_MODEL,
+        max_tokens: MAX_TOKENS,
+        system: COPILOT_SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: userMessage }],
+      });
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
-    const parsed = this.parseResponse(text);
+      const text = response.content[0].type === 'text' ? response.content[0].text : '';
+      const parsed = this.parseResponse(text);
 
-    return {
-      ...parsed,
-      tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
-    };
+      return {
+        ...parsed,
+        tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+      };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Code analysis failed';
+      throw new Error(msg);
+    }
   }
 
   private parseResponse(text: string): Omit<AnalysisResult, 'tokensUsed'> {

@@ -58,7 +58,8 @@ router.post('/analyze', async (req: AuthRequest, res: Response): Promise<void> =
     });
   } catch (error) {
     console.error('Claude analysis error:', error);
-    res.status(500).json({ error: 'Analysis failed' });
+    const msg = error instanceof Error ? error.message : 'Analysis failed';
+    res.status(500).json({ error: msg });
   }
 });
 
