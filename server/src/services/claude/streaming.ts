@@ -12,31 +12,41 @@ export async function streamAnalysis(
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
 
-  const stream = await client.messages.stream({
-    model: DEFAULT_MODEL,
-    max_tokens: MAX_TOKENS,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: userMessage }],
-  });
+  try {
+    const stream = await client.messages.stream({
+      model: DEFAULT_MODEL,
+      max_tokens: MAX_TOKENS,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userMessage }],
+    });
 
-  for await (const chunk of stream) {
-    if (
-      chunk.type === 'content_block_delta' &&
-      chunk.delta.type === 'text_delta'
-    ) {
-      res.write(`data: ${JSON.stringify({ text: chunk.delta.text })}\n\n`);
+    for await (const chunk of stream) {
+      if (
+        chunk.type === 'content_block_delta' &&
+        chunk.delta.type === 'text_delta'
+      ) {
+        res.write(`data: ${JSON.stringify({ text: chunk.delta.text })}\n\n`);
+      }
+    }
+
+    const finalMessage = await stream.finalMessage();
+    res.write(
+      `data: ${JSON.stringify({
+        done: true,
+        usage: {
+          inputTokens: finalMessage.usage.input_tokens,
+          outputTokens: finalMessage.usage.output_tokens,
+        },
+      })}\n\n`
+    );
+    res.end();
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Streaming failed';
+    if (res.headersSent) {
+      res.write(`data: ${JSON.stringify({ error: msg, done: true })}\n\n`);
+      res.end();
+    } else {
+      res.status(500).json({ error: msg });
     }
   }
-
-  const finalMessage = await stream.finalMessage();
-  res.write(
-    `data: ${JSON.stringify({
-      done: true,
-      usage: {
-        inputTokens: finalMessage.usage.input_tokens,
-        outputTokens: finalMessage.usage.output_tokens,
-      },
-    })}\n\n`
-  );
-  res.end();
 }
