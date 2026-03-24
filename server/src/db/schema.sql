@@ -9,6 +9,11 @@ CREATE TABLE IF NOT EXISTS users (
   usage_count INTEGER DEFAULT 0,
   usage_limit INTEGER DEFAULT 5,
   stripe_customer_id VARCHAR(255),
+  stripe_subscription_id VARCHAR(255),
+  code_generation_count INTEGER NOT NULL DEFAULT 0,
+  circuit_generation_count INTEGER NOT NULL DEFAULT 0,
+  generation_reset_at TIMESTAMP WITH TIME ZONE DEFAULT (date_trunc('month', NOW()) + interval '1 month'),
+  payment_failed BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

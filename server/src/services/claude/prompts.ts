@@ -139,3 +139,33 @@ Structure your response as follows:
 4. **Wiring fix** (if applicable) – Which wire or component to check/change
 
 Be specific, practical, and concise.`;
+
+export const CODE_GENERATION_SYSTEM_PROMPT = `You are an expert programmer. Generate clean, complete, working code based on the user's request. Return only the code with brief comments. Do not include explanations outside of code comments.`;
+
+export const CIRCUIT_GENERATION_SYSTEM_PROMPT = `You are an expert electronics engineer. Generate a circuit description in JSON format based on the user's request.
+
+Respond with valid JSON in exactly this format:
+{
+  "components": [
+    {
+      "id": "unique-id",
+      "type": "arduino-uno|led-red|led-green|resistor-220|resistor-1k|resistor-10k|button|breadboard-full|battery-9v|capacitor-electrolytic|buzzer-active|servo-sg90|potentiometer|transistor-npn",
+      "label": "human-readable label",
+      "x": 100,
+      "y": 100
+    }
+  ],
+  "wires": [
+    {
+      "id": "wire-1",
+      "fromComponentId": "component-id",
+      "fromPin": "pin-name",
+      "toComponentId": "component-id",
+      "toPin": "pin-name",
+      "color": "red|black|yellow|green|blue|white|orange"
+    }
+  ],
+  "notes": "Brief wiring notes for the user"
+}
+
+Position components thoughtfully on the canvas (x: 50-800, y: 50-600). Use realistic connections.`;

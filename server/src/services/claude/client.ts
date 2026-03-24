@@ -11,5 +11,5 @@ export function getClaudeClient(): Anthropic {
   return claudeClient;
 }
 
-export const DEFAULT_MODEL = 'claude-3-5-sonnet-20241022';
+export const DEFAULT_MODEL = 'claude-sonnet-4-20250514';
 export const MAX_TOKENS = 8192;

@@ -1,7 +1,13 @@
 node_modules/
 dist/
+build/
+.next/
 .env
+.env.local
+.env.*.local
 uploads/
 local-repos/
 *.log
 .DS_Store
+Thumbs.db
+*.tsbuildinfo

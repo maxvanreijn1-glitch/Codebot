@@ -15,6 +15,8 @@ import pullRequestsRoutes from './routes/pull-requests';
 import commandsRoutes from './routes/commands';
 import copilotRoutes from './routes/copilot';
 import arduinoRoutes from './routes/arduino';
+import generateRoutes from './routes/generateRoutes';
+import stripeRoutes from './routes/stripeRoutes';
 import { errorHandler } from './middleware/errorHandler';
 import { requestLogger, logger } from './utils/logger';
 import { registerGlobalAlertHandlers, alertDatabaseError } from './utils/alerting';
@@ -47,6 +49,7 @@ app.use(cors({
 }));
 
 app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
+app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -74,6 +77,8 @@ app.use('/api/pull-requests', pullRequestsRoutes);
 app.use('/api/commands', commandsRoutes);
 app.use('/api/copilot', copilotRoutes);
 app.use('/api/arduino', arduinoRoutes);
+app.use('/api/generate', generateRoutes);
+app.use('/api/stripe', stripeRoutes);
 
 app.get('/api/health', async (_req, res) => {
   try {
