@@ -15,8 +15,14 @@ import pullRequestsRoutes from './routes/pull-requests';
 import commandsRoutes from './routes/commands';
 import copilotRoutes from './routes/copilot';
 import arduinoRoutes from './routes/arduino';
+import { errorHandler } from './middleware/errorHandler';
+import { requestLogger, logger } from './utils/logger';
+import { registerGlobalAlertHandlers, alertDatabaseError } from './utils/alerting';
+import { pool } from './db';
 
 dotenv.config();
+
+registerGlobalAlertHandlers();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -35,17 +41,25 @@ app.use(cors({
     callback(new Error('Origin not allowed'));
   },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  maxAge: 86400,
 }));
 
 app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Structured request logging
+app.use(requestLogger);
+
+// IP-based fallback rate limit (protects unauthenticated routes)
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
   standardHeaders: true,
   legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later' },
 });
 app.use(limiter);
 
@@ -61,8 +75,23 @@ app.use('/api/commands', commandsRoutes);
 app.use('/api/copilot', copilotRoutes);
 app.use('/api/arduino', arduinoRoutes);
 
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+app.get('/api/health', async (_req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      database: 'connected',
+      uptime: process.uptime(),
+    });
+  } catch (err) {
+    logger.error('health_check_db_error', { message: (err as Error).message });
+    res.status(503).json({
+      status: 'unhealthy',
+      timestamp: new Date().toISOString(),
+      database: 'disconnected',
+    });
+  }
 });
 
 // Serve React frontend in production
@@ -80,14 +109,16 @@ if (isProduction && fs.existsSync(clientIndexPath)) {
   });
 }
 
-// Error handler
-app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error(err.stack);
-  res.status(500).json({ error: 'Internal server error' });
+// Global error handler — must be last
+app.use(errorHandler);
+
+// Forward database pool errors to alerting
+pool.on('error', (err: Error) => {
+  alertDatabaseError(err);
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  logger.info('server_started', { port: PORT, env: process.env.NODE_ENV || 'development' });
 });
 
 export default app;

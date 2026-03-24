@@ -1,6 +1,8 @@
 import { Router, Response } from 'express';
 import { pool } from '../db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { validateProfileUpdate } from '../middleware/validation';
+import { logger } from '../utils/logger';
 
 const router = Router();
 router.use(authenticateToken);
@@ -17,25 +19,22 @@ router.get('/profile', async (req: AuthRequest, res: Response): Promise<void> =>
     }
     res.json(result.rows[0]);
   } catch (error) {
-    console.error('Get profile error:', error);
+    logger.error('get_profile_error', { userId: req.user?.id, message: (error as Error).message });
     res.status(500).json({ error: 'Failed to get profile' });
   }
 });
 
-router.put('/profile', async (req: AuthRequest, res: Response): Promise<void> => {
+router.put('/profile', validateProfileUpdate, async (req: AuthRequest, res: Response): Promise<void> => {
   const { name } = req.body;
-  if (!name) {
-    res.status(400).json({ error: 'Name is required' });
-    return;
-  }
   try {
     const result = await pool.query(
       'UPDATE users SET name = $1 WHERE id = $2 RETURNING id, email, name, tier, usage_count, usage_limit',
-      [name.trim(), req.user!.id]
+      [name, req.user!.id]
     );
+    logger.info('profile_updated', { userId: req.user?.id });
     res.json(result.rows[0]);
   } catch (error) {
-    console.error('Update profile error:', error);
+    logger.error('update_profile_error', { userId: req.user?.id, message: (error as Error).message });
     res.status(500).json({ error: 'Failed to update profile' });
   }
 });
@@ -59,7 +58,7 @@ router.get('/usage', async (req: AuthRequest, res: Response): Promise<void> => {
       percentage: Math.round((user.usage_count / user.usage_limit) * 100),
     });
   } catch (error) {
-    console.error('Get usage error:', error);
+    logger.error('get_usage_error', { userId: req.user?.id, message: (error as Error).message });
     res.status(500).json({ error: 'Failed to get usage' });
   }
 });
