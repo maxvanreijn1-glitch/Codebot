@@ -5,17 +5,14 @@ import { pool } from '../db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { analyzeCode } from '../utils/openai';
 import { checkAndIncrementUsage } from '../utils/usage';
+import { validateAnalysisCreate } from '../middleware/validation';
+import { logger } from '../utils/logger';
 
 const router = Router();
 router.use(authenticateToken);
 
-router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
+router.post('/', validateAnalysisCreate, async (req: AuthRequest, res: Response): Promise<void> => {
   const { repositoryId, prompt, code } = req.body;
-
-  if (!prompt) {
-    res.status(400).json({ error: 'Prompt is required' });
-    return;
-  }
 
   try {
     const canProceed = await checkAndIncrementUsage(req.user!.id);
@@ -60,17 +57,18 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
         'UPDATE analyses SET result = $1, status = $2 WHERE id = $3',
         [JSON.stringify(result), 'completed', analysis.id]
       );
+      logger.info('analysis_completed', { userId: req.user!.id, analysisId: analysis.id });
       res.status(201).json({ ...analysis, result, status: 'completed' });
     } catch (aiError) {
       await pool.query(
         'UPDATE analyses SET status = $1 WHERE id = $2',
         ['failed', analysis.id]
       );
-      console.error('AI analysis error:', aiError);
+      logger.error('analysis_ai_error', { userId: req.user!.id, message: (aiError as Error).message });
       res.status(500).json({ error: 'Analysis failed' });
     }
   } catch (error) {
-    console.error('Analysis error:', error);
+    logger.error('analysis_error', { userId: req.user!.id, message: (error as Error).message });
     res.status(500).json({ error: 'Failed to run analysis' });
   }
 });
@@ -87,7 +85,7 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
     );
     res.json(result.rows);
   } catch (error) {
-    console.error('List analyses error:', error);
+    logger.error('list_analyses_error', { userId: req.user!.id, message: (error as Error).message });
     res.status(500).json({ error: 'Failed to list analyses' });
   }
 });
@@ -107,7 +105,7 @@ router.get('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
     }
     res.json(result.rows[0]);
   } catch (error) {
-    console.error('Get analysis error:', error);
+    logger.error('get_analysis_error', { userId: req.user!.id, message: (error as Error).message });
     res.status(500).json({ error: 'Failed to get analysis' });
   }
 });

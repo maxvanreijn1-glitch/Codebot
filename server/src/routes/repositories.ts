@@ -4,6 +4,8 @@ import path from 'path';
 import fs from 'fs';
 import { pool } from '../db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { validateRepositoryCreate } from '../middleware/validation';
+import { logger } from '../utils/logger';
 
 const uploadDir = path.join(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadDir)) {
@@ -41,14 +43,10 @@ const upload = multer({
 const router = Router();
 router.use(authenticateToken);
 
-router.post('/', upload.array('files', 50), async (req: AuthRequest, res: Response): Promise<void> => {
+router.post('/', upload.array('files', 50), validateRepositoryCreate, async (req: AuthRequest, res: Response): Promise<void> => {
   const { name, description } = req.body;
   const files = req.files as Express.Multer.File[];
 
-  if (!name) {
-    res.status(400).json({ error: 'Repository name is required' });
-    return;
-  }
   if (!files || files.length === 0) {
     res.status(400).json({ error: 'At least one file is required' });
     return;
@@ -69,9 +67,10 @@ router.post('/', upload.array('files', 50), async (req: AuthRequest, res: Respon
       [req.user!.id, name, description || null, repoDir, files.length]
     );
 
+    logger.info('repository_created', { userId: req.user!.id, repositoryId: result.rows[0].id });
     res.status(201).json(result.rows[0]);
   } catch (error) {
-    console.error('Upload error:', error);
+    logger.error('repository_upload_error', { userId: req.user!.id, message: (error as Error).message });
     res.status(500).json({ error: 'Failed to upload repository' });
   }
 });
@@ -84,7 +83,7 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
     );
     res.json(result.rows);
   } catch (error) {
-    console.error('List repos error:', error);
+    logger.error('list_repos_error', { userId: req.user!.id, message: (error as Error).message });
     res.status(500).json({ error: 'Failed to list repositories' });
   }
 });
@@ -106,7 +105,7 @@ router.get('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
     }
     res.json({ ...repo, files });
   } catch (error) {
-    console.error('Get repo error:', error);
+    logger.error('get_repo_error', { userId: req.user!.id, message: (error as Error).message });
     res.status(500).json({ error: 'Failed to get repository' });
   }
 });
@@ -126,9 +125,10 @@ router.delete('/:id', async (req: AuthRequest, res: Response): Promise<void> => 
       fs.rmSync(repo.file_path, { recursive: true, force: true });
     }
     await pool.query('DELETE FROM repositories WHERE id = $1', [repo.id]);
+    logger.info('repository_deleted', { userId: req.user!.id, repositoryId: repo.id });
     res.json({ message: 'Repository deleted' });
   } catch (error) {
-    console.error('Delete repo error:', error);
+    logger.error('delete_repo_error', { userId: req.user!.id, message: (error as Error).message });
     res.status(500).json({ error: 'Failed to delete repository' });
   }
 });
