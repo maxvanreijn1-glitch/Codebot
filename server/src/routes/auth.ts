@@ -88,7 +88,10 @@ router.post('/login', validateLogin, async (req: Request, res: Response): Promis
 router.get('/me', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const result = await pool.query(
-      'SELECT id, email, name, tier, usage_count, usage_limit, stripe_customer_id, created_at FROM users WHERE id = $1',
+      `SELECT id, email, name, tier, usage_count, usage_limit,
+              stripe_customer_id, subscription_plan, subscription_status,
+              code_generation_count, circuit_generation_count, created_at
+         FROM users WHERE id = $1`,
       [req.user!.id]
     );
     if (result.rows.length === 0) {

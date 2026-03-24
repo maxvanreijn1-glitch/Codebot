@@ -8,16 +8,53 @@ datasource db {
 }
 
 model User {
-  id            String       @id @default(uuid())
-  email         String       @unique
-  password_hash String
-  name          String?
-  plan          String       @default("free")
-  stripeCustomerId String?
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-  repositories  Repository[]
-  analyses      Analysis[]
+  id                     String         @id @default(uuid())
+  email                  String         @unique
+  password_hash          String
+  name                   String?
+  // Subscription / billing
+  tier                   String         @default("free")
+  subscription_plan      String         @default("free")
+  subscription_status    String         @default("active")
+  stripe_customer_id     String?
+  stripe_subscription_id String?
+  payment_failed         Boolean        @default(false)
+  // Generation usage counters (reset monthly)
+  code_generation_count    Int          @default(0)
+  circuit_generation_count Int          @default(0)
+  generation_reset_at      DateTime?
+  // Legacy analysis usage
+  usage_count            Int            @default(0)
+  usage_limit            Int            @default(5)
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+  repositories           Repository[]
+  analyses               Analysis[]
+  subscriptions          Subscription[]
+  usageLogs              UsageLog[]
+}
+
+model Subscription {
+  id                   String    @id @default(uuid())
+  userId               String
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stripeSubscriptionId String    @unique
+  stripeCustomerId     String
+  plan                 String
+  status               String    @default("active")
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  cancelledAt          DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+}
+
+model UsageLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  createdAt DateTime @default(now())
 }
 
 model Repository {

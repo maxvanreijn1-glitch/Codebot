@@ -46,6 +46,19 @@ export async function openBillingPortal(): Promise<void> {
   }
 }
 
+/** Get the current user's subscription info. */
+export async function getSubscriptionInfo(): Promise<{
+  tier: string;
+  subscription_plan: string;
+  subscription_status: string;
+  payment_failed: boolean;
+  code_generation_count: number;
+  circuit_generation_count: number;
+}> {
+  const res = await apiClient.get('/stripe/subscription');
+  return res.data;
+}
+
 // ─── Generation helpers ───────────────────────────────────────────────────────
 
 /** Stream code generation. Calls onChunk for each text delta, resolves when done. */
