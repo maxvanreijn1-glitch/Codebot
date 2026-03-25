@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Code2, LogOut, User, BarChart3 } from 'lucide-react';
+import { Code2, LogOut, User, BarChart3, Zap } from 'lucide-react';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
@@ -25,6 +25,9 @@ export default function Navbar() {
               <>
                 <Link to="/dashboard" className="flex items-center gap-1 text-gray-400 hover:text-white transition-colors text-sm">
                   <BarChart3 className="w-4 h-4" />Dashboard
+                </Link>
+                <Link to="/circuit-builder" className="flex items-center gap-1 text-gray-400 hover:text-yellow-400 transition-colors text-sm">
+                  <Zap className="w-4 h-4" />Circuit Builder
                 </Link>
                 <div className="flex items-center gap-3">
                   <span className="text-sm text-gray-400 flex items-center gap-1">

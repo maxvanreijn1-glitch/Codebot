@@ -16,6 +16,13 @@ export function checkUsageLimit(type: GenerationType) {
       return;
     }
 
+    // Admin accounts bypass all usage limits
+    if (tier === 'admin') {
+      (req as AuthRequest & { generationRemaining?: number }).generationRemaining = -1;
+      next();
+      return;
+    }
+
     try {
       const { allowed, remaining } = await checkAndIncrementGenerationUsage(
         userId,

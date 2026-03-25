@@ -17,6 +17,7 @@ import copilotRoutes from './routes/copilot';
 import arduinoRoutes from './routes/arduino';
 import generateRoutes from './routes/generateRoutes';
 import stripeRoutes from './routes/stripeRoutes';
+import circuitRoutes from './routes/circuitRoutes';
 import { errorHandler } from './middleware/errorHandler';
 import { requestLogger, logger } from './utils/logger';
 import { registerGlobalAlertHandlers, alertDatabaseError } from './utils/alerting';
@@ -79,6 +80,7 @@ app.use('/api/copilot', copilotRoutes);
 app.use('/api/arduino', arduinoRoutes);
 app.use('/api/generate', generateRoutes);
 app.use('/api/stripe', stripeRoutes);
+app.use('/api/circuit', circuitRoutes);
 
 app.get('/api/health', async (_req, res) => {
   try {

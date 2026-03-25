@@ -1,8 +1,8 @@
 import { pool } from '../db';
 
 export const GENERATION_LIMITS = {
-  code: { free: 10, pro: 100, premium: Infinity },
-  circuit: { free: 5, pro: 50, premium: Infinity },
+  code: { free: 10, pro: 100, premium: Infinity, admin: Infinity },
+  circuit: { free: 5, pro: 50, premium: Infinity, admin: Infinity },
 } as const;
 
 export type GenerationType = 'code' | 'circuit';
