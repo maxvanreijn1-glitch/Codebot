@@ -13,7 +13,8 @@ export async function checkAndIncrementUsage(userId: string): Promise<boolean> {
       return false;
     }
     const { usage_count, usage_limit } = result.rows[0];
-    if (usage_count >= usage_limit) {
+    // usage_limit = -1 means unlimited (e.g. admin accounts)
+    if (usage_limit !== -1 && usage_count >= usage_limit) {
       await client.query('ROLLBACK');
       return false;
     }
@@ -39,12 +40,13 @@ export const TIER_LIMITS = {
   free: 5,
   pro: 50,
   premium: 1000,
+  admin: -1,
 } as const;
 
 // Plan-based limits for code and circuit generation (monthly)
 export const GENERATION_LIMITS = {
-  code: { free: 10, pro: 100, premium: Infinity },
-  circuit: { free: 5, pro: 50, premium: Infinity },
+  code: { free: 10, pro: 100, premium: Infinity, admin: Infinity },
+  circuit: { free: 5, pro: 50, premium: Infinity, admin: Infinity },
 } as const;
 
 export type GenerationType = 'code' | 'circuit';
